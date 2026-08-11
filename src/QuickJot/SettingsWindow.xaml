@@ -1,0 +1,289 @@
+<Window x:Class="QuickJot.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:QuickJot"
+        Title="Настройки QuickJot"
+        Width="520"
+        SizeToContent="Height"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        Background="Transparent"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        WindowStartupLocation="CenterScreen">
+
+    <!-- Та же оболочка, что у окна задач: Mica, скруглённые углы, без системной рамки (раздел 5). -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome GlassFrameThickness="-1" CaptionHeight="44" ResizeBorderThickness="0" />
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <local:TextToVisibilityConverter x:Key="ErrorVisibility" />
+
+        <!-- Секция настроек — такая же карточка, как задача в списке. -->
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16,14" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,16,0" />
+        </Style>
+
+        <!-- Значение ползунка: акцентом, чтобы глаз ловил цифру, а не подпись. -->
+        <Style x:Key="Value" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="MinWidth" Value="86" />
+            <Setter Property="TextAlignment" Value="Right" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="12,0,0,0" />
+        </Style>
+
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+        </Style>
+
+        <Style x:Key="Error" TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+
+        <!--
+            BasedOn обязателен: неявный стиль без него заменяет собой стиль темы целиком,
+            контрол падает на старый шаблон Aero, и выпадающий список рисуется белым.
+        -->
+        <Style TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="IsSnapToTickEnabled" Value="True" />
+            <Setter Property="Margin" Value="0,2" />
+        </Style>
+
+        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="Margin" Value="0,2" />
+        </Style>
+
+        <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="Margin" Value="0,7" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+
+        <!-- Кнопка окна без рамки: заголовок и «Готово» рисуются в стиле карточек. -->
+        <Style x:Key="FlatButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Back"
+                                Background="Transparent"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource CardHoverBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource FlatButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Back"
+                                Background="{DynamicResource AccentSoftBrush}"
+                                BorderBrush="{DynamicResource AccentRingBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource AccentHighlightBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Padding="16,10,16,16">
+        <StackPanel>
+
+            <!-- Заголовок окна: за него же окно и таскается (CaptionHeight выше). -->
+            <Grid Margin="4,0,0,12">
+                <TextBlock Text="Настройки"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextBrush}" />
+                <Button Content="✕"
+                        Style="{StaticResource FlatButton}"
+                        FontSize="14"
+                        Padding="10,4"
+                        HorizontalAlignment="Right"
+                        Click="OnDoneClick" />
+            </Grid>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="ГОРЯЧАЯ КЛАВИША" Style="{StaticResource SectionTitle}" />
+
+                    <Border Background="{DynamicResource NoteSurfaceBrush}" CornerRadius="8">
+                        <TextBox x:Name="HotkeyBox"
+                                 Text="{Binding HotkeyText, Mode=OneWay}"
+                                 IsReadOnly="True"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="12,10"
+                                 FontSize="14"
+                                 Foreground="{DynamicResource TextBrush}"
+                                 Cursor="Hand"
+                                 PreviewKeyDown="OnHotkeyKeyDown" />
+                    </Border>
+
+                    <TextBlock Text="Нажмите нужную комбинацию — она проверяется сразу"
+                               Style="{StaticResource Hint}"
+                               Margin="2,8,0,0" />
+                    <TextBlock Text="{Binding HotkeyError}"
+                               Style="{StaticResource Error}"
+                               Margin="2,6,0,0"
+                               Visibility="{Binding HotkeyError, Converter={StaticResource ErrorVisibility}}" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="ОКНО" Style="{StaticResource SectionTitle}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="150" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Угол привязки" Style="{StaticResource Label}" />
+                        <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
+                                  ItemsSource="{Binding Corners}"
+                                  DisplayMemberPath="Label"
+                                  SelectedValuePath="Value"
+                                  SelectedValue="{Binding Corner}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Ширина окна" Style="{StaticResource Label}" />
+                        <Slider Grid.Row="1" Grid.Column="1" Minimum="360" Maximum="1200" TickFrequency="10"
+                                Value="{Binding Width}" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Value}"
+                                   Text="{Binding Width, StringFormat={}{0:F0} px}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Максимальная высота" Style="{StaticResource Label}" />
+                        <Slider Grid.Row="2" Grid.Column="1" Minimum="20" Maximum="95" TickFrequency="5"
+                                Value="{Binding MaxHeightPercent}" />
+                        <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Value}"
+                                   Text="{Binding MaxHeightPercent, StringFormat={}{0:F0}% экрана}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="КАРТОЧКА ЗАДАЧИ" Style="{StaticResource SectionTitle}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="150" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Строк в заголовке" Style="{StaticResource Label}" />
+                        <Slider Grid.Row="0" Grid.Column="1" Minimum="1" Maximum="4" TickFrequency="1"
+                                Value="{Binding TitleLines}" />
+                        <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Value}" Text="{Binding TitleLines}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Шрифт заголовка" Style="{StaticResource Label}" />
+                        <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                                  ItemsSource="{Binding Fonts}"
+                                  SelectedItem="{Binding TitleFont}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Размер шрифта" Style="{StaticResource Label}" />
+                        <Slider Grid.Row="2" Grid.Column="1" Minimum="11" Maximum="20" TickFrequency="1"
+                                Value="{Binding TitleSize}" />
+                        <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Value}"
+                                   Text="{Binding TitleSize, StringFormat={}{0:F0} px}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="ОФОРМЛЕНИЕ И ЗАПУСК" Style="{StaticResource SectionTitle}" />
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="150" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Тема" Style="{StaticResource Label}" />
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding Themes}"
+                                  DisplayMemberPath="Label"
+                                  SelectedValuePath="Value"
+                                  SelectedValue="{Binding Theme}" />
+                    </Grid>
+
+                    <CheckBox Content="Анимации" IsChecked="{Binding Animations}" />
+                    <CheckBox Content="Запускать при входе в систему" IsChecked="{Binding AutostartEnabled}" />
+                    <CheckBox Content="Запускать с правами администратора" IsChecked="{Binding RunAsAdmin}" />
+
+                    <TextBlock Style="{StaticResource Hint}"
+                               Margin="28,2,0,0"
+                               Text="Права нужны только чтобы хоткей срабатывал над окнами, запущенными от администратора. Windows спросит подтверждение, а сами права появятся при следующем входе в систему." />
+                    <TextBlock Text="{Binding AutostartError}"
+                               Style="{StaticResource Error}"
+                               Margin="28,6,0,0"
+                               Visibility="{Binding AutostartError, Converter={StaticResource ErrorVisibility}}" />
+                </StackPanel>
+            </Border>
+
+            <Button Content="Готово"
+                    Style="{StaticResource AccentButton}"
+                    HorizontalAlignment="Right"
+                    Padding="24,8"
+                    Margin="0,4,0,0"
+                    IsCancel="True"
+                    Click="OnDoneClick" />
+        </StackPanel>
+    </Border>
+</Window>
