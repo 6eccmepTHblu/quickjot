@@ -507,6 +507,15 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Правку завершает не только Enter: клик мимо карточки или уход фокуса из окна — тоже.
+    /// Иначе карточка навсегда остаётся однострочным полем и длинный заголовок больше не переносится.
+    /// </summary>
+    private void OnTitleEditorLostFocus(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is TaskCardViewModel card) card.CommitEdit();
+    }
+
+    /// <summary>
     /// Вставка длиннее 500 символов: первые 500 в заголовок, остаток — в заметку, она раскрывается.
     /// Фокус остаётся в заголовке — раздел 7.
     /// </summary>

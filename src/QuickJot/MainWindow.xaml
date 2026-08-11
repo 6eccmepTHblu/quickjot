@@ -344,6 +344,7 @@
                                                  Visibility="Collapsed"
                                                  VerticalAlignment="Center"
                                                  IsVisibleChanged="OnTitleEditorVisibleChanged"
+                                                 LostKeyboardFocus="OnTitleEditorLostFocus"
                                                  Text="{Binding EditTitle, UpdateSourceTrigger=PropertyChanged}" />
 
                                         <Button Grid.Column="2"
