@@ -59,9 +59,22 @@ public static class Db
         db.Open();
         db.Execute("PRAGMA journal_mode=WAL;");
         db.Execute("PRAGMA synchronous=FULL;"); // запись durable на каждое действие
+
+        // Без этого WAL не сливается в саму базу, пока не наберёт 1000 страниц: за день работы
+        // tasks.db так и остаётся пустой заготовкой, а все задачи лежат в файле-спутнике tasks.db-wal.
+        // Стоит SQLite один раз счесть спутник неактуальным (например, после снятия процесса,
+        // оставившего протухший tasks.db-shm) — и приложение молча открывается с пустым списком
+        // поверх целых данных. Сливаем после каждой записи: база крошечная, цена — один fsync.
+        db.Execute("PRAGMA wal_autocheckpoint=1;");
+        db.Execute("PRAGMA wal_checkpoint(TRUNCATE);"); // и сразу подобрать всё, что накопилось раньше
+
         db.Execute(Schema);
         return db;
     }
+
+    /// <summary>Куда класть бэкапы: рядом с той базой, которая открыта, а не всегда в рабочую папку.</summary>
+    public static string BackupsDirFor(string dbPath) =>
+        Path.Combine(Path.GetDirectoryName(dbPath)!, "backups");
 
     /// <summary>
     /// Копия базы при старте, хранятся последние <paramref name="keep"/> штук.

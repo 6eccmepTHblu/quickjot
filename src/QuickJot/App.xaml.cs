@@ -62,8 +62,11 @@ public partial class App : Application
         // QUICKJOT_DEV=<путь к базе> — прогон интерфейса на отдельной базе, не трогая рабочую.
         var devDatabase = Environment.GetEnvironmentVariable("QUICKJOT_DEV");
 
-        _db = Db.Open(devDatabase ?? Db.DefaultDbPath);
-        Db.Backup(_db, Path.Combine(Db.DataDir, "backups"));
+        // Бэкап кладётся рядом с открытой базой: иначе прогон на dev-базе вытесняет своими
+        // пустыми копиями настоящие бэкапы рабочей.
+        var dbPath = devDatabase ?? Db.DefaultDbPath;
+        _db = Db.Open(dbPath);
+        Db.Backup(_db, Db.BackupsDirFor(dbPath));
         Tasks = new TaskRepository(_db);
         Settings = new SettingsStore(_db);
 

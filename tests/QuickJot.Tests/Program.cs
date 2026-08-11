@@ -1,5 +1,7 @@
 using System.IO;
 using System.Windows.Input;
+using Dapper;
+using Microsoft.Data.Sqlite;
 using System.Windows.Threading;
 using QuickJot.Data;
 using QuickJot.ViewModels;
@@ -32,6 +34,7 @@ internal static class Program
         Run("разбор комбинации хоткея", HotkeyParsing);
         Run("настройки применяются на лету", SettingsReload);
         Run("перетаскивание порядка мышью", DragReorder);
+        Run("задачи лежат в самой базе, а не только в -wal", DataLandsInTheDatabaseFile);
 
         Console.WriteLine(_failures == 0 ? "\nвсе проверки прошли" : $"\nпровалено: {_failures}");
         return _failures == 0 ? 0 : 1;
@@ -581,6 +584,21 @@ internal static class Program
 
     private static void Run(string name, Action<TaskRepository> test) => Run(name, (repo, _) => test(repo));
 
+    /// <summary>Для проверок со своим жизненным циклом базы: общий Run открывает её сам.</summary>
+    private static void Run(string name, Action test)
+    {
+        try
+        {
+            test();
+            Console.WriteLine($"OK   {name}");
+        }
+        catch (Exception ex)
+        {
+            _failures++;
+            Console.WriteLine($"FAIL {name}\n     {ex.Message}");
+        }
+    }
+
     private static void Run(string name, Action<TaskRepository, SettingsStore> test)
     {
         var path = Path.Combine(Path.GetTempPath(), $"quickjot-test-{Guid.NewGuid():N}.db");
@@ -598,6 +616,36 @@ internal static class Program
         finally
         {
             SqliteConnectionCleanup(path);
+        }
+    }
+
+    /// <summary>
+    /// Запись должна оказываться в самой tasks.db, а не только в файле-спутнике tasks.db-wal.
+    /// Пока спутник не слит, достаточно SQLite один раз счесть его неактуальным — и приложение
+    /// открывается с пустым списком поверх целых задач. Проверяется на копии одной только базы,
+    /// без спутников: ровно то, что видно, если спутник потерян.
+    /// </summary>
+    private static void DataLandsInTheDatabaseFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"quickjot-wal-{Guid.NewGuid():N}.db");
+        var copy = path + ".copy";
+        try
+        {
+            using (var db = Db.Open(path))
+            {
+                new TaskRepository(db).Create("задача, пережившая потерю спутника");
+                File.Copy(path, copy, overwrite: true); // соединение ещё открыто — как при снятом процессе
+            }
+
+            using var reopened = new SqliteConnection($"Data Source={copy};Mode=ReadOnly");
+            reopened.Open();
+            Check(reopened.QuerySingle<int>("select count(*) from tasks") == 1,
+                "задача осталась только в -wal: сама база пуста");
+        }
+        finally
+        {
+            SqliteConnectionCleanup(path);
+            SqliteConnectionCleanup(copy);
         }
     }
 
