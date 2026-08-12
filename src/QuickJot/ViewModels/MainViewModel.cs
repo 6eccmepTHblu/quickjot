@@ -360,26 +360,11 @@ public sealed partial class MainViewModel : ObservableObject
         Tasks.Insert(index, card);
     }
 
-    /// <summary>
-    /// Ищем и по заголовку, и по чеклисту: в большой задаче нужное чаще всего именно в пунктах.
-    /// Заодно помечаем карточку, которую вытащил именно чеклист, — иначе непонятно, за что она всплыла.
-    /// </summary>
-    private bool Matches(object item)
-    {
-        if (item is not TaskCardViewModel card) return false;
-
-        if (Filter.Length == 0)
-        {
-            card.IsSubtaskMatch = false;
-            return true;
-        }
-
-        bool inTitle = card.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase);
-        bool inSubtasks = card.Subtasks.Any(s => s.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase));
-
-        card.IsSubtaskMatch = inSubtasks && !inTitle;
-        return inTitle || inSubtasks;
-    }
+    /// <summary>Ищем и по заголовку, и по чеклисту: в большой задаче нужное чаще всего именно в пунктах.</summary>
+    private bool Matches(object item) => item is TaskCardViewModel card
+        && (Filter.Length == 0
+            || card.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase)
+            || card.Subtasks.Any(s => s.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase)));
 
     partial void OnDraftChanged(string value)
     {
@@ -640,7 +625,6 @@ public sealed partial class TaskCardViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasNotes))]
-    [NotifyPropertyChangedFor(nameof(HasSecondTier))]
     [NotifyPropertyChangedFor(nameof(ShowNote))]
     private string? _notes;
 
@@ -718,14 +702,7 @@ public sealed partial class TaskCardViewModel : ObservableObject
     /// <summary>Esc — откатить изменение заголовка — раздел 10.</summary>
     public void CancelEdit() => IsEditing = false;
 
-    /// <summary>Облачко видно, только когда заметка есть.</summary>
     public bool HasNotes => !string.IsNullOrWhiteSpace(Notes);
-
-    /// <summary>
-    /// Нижний ярус карточки. Пустым он не показывается: у задачи из одного заголовка
-    /// это была бы лишняя строка, которая просто занимает высоту.
-    /// </summary>
-    public bool HasSecondTier => HasNotes || HasSubtasks;
 
     // --- чеклист, раздел 8 ---
 
@@ -737,13 +714,7 @@ public sealed partial class TaskCardViewModel : ObservableObject
 
     public bool HasSubtasks => Subtasks.Count > 0;
 
-    public string SubtaskCounter => $"{Subtasks.Count(s => s.IsDone)}/{Subtasks.Count}";
-
-    public bool AllSubtasksDone => HasSubtasks && Subtasks.All(s => s.IsDone);
-
-    /// <summary>Карточку вытащил в фильтр чеклист, а не заголовок, — счётчик подсвечивается.</summary>
-    [ObservableProperty]
-    private bool _isSubtaskMatch;
+    public int SubtasksDone => Subtasks.Count(s => s.IsDone);
 
     /// <summary>Чем описать последнее изменение чеклиста в стеке отмены — раздел 11.</summary>
     public string SubtaskChange { get; private set; } = "Чеклист изменён";
@@ -818,10 +789,8 @@ public sealed partial class TaskCardViewModel : ObservableObject
     {
         SubtaskChange = description;
         OnPropertyChanged(nameof(HasSubtasks));
-        OnPropertyChanged(nameof(HasSecondTier));
+        OnPropertyChanged(nameof(SubtasksDone));
         OnPropertyChanged(nameof(ShowChecklist));
-        OnPropertyChanged(nameof(SubtaskCounter));
-        OnPropertyChanged(nameof(AllSubtasksDone));
         OnPropertyChanged(nameof(SubtasksText)); // последним: на него подписана запись в базу
     }
 
@@ -830,10 +799,6 @@ public sealed partial class TaskCardViewModel : ObservableObject
 
     [RelayCommand]
     private void ToggleFlag() => IsFlagged = !IsFlagged;
-
-    /// <summary>Клик по облачку: заметка есть — развернуть, нет — открыть пустое поле — раздел 8.</summary>
-    [RelayCommand]
-    private void ToggleNote() => IsExpanded = !IsExpanded;
 
     [RelayCommand]
     private void Delete() => DeleteRequested?.Invoke(this);

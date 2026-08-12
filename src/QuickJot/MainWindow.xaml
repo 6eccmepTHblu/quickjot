@@ -26,12 +26,6 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
-        <!-- 16x16. Свои контуры, а не глиф шрифта: не зависит от того, какой набор иконок стоит в системе. -->
-        <Geometry x:Key="NoteGlyph">
-            M2.5,2.5 H13.5 A2,2 0 0 1 15.5,4.5 V10.5 A2,2 0 0 1 13.5,12.5 H7 L3.9,15.2 A0.5,0.5 0 0 1 3,14.8 V12.5
-            H2.5 A2,2 0 0 1 0.5,10.5 V4.5 A2,2 0 0 1 2.5,2.5 Z
-        </Geometry>
-
         <!--
             Поля без рамки: только каретка и placeholder (раздел 15). Стандартный шаблон Fluent
             рисует свою подложку и акцентное подчёркивание — на Mica это выглядит как дыра в окне.
@@ -104,17 +98,6 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-        </Style>
-
-        <!--
-            Цвет иконки задаётся стилем, а не прямо на элементе: локальное значение перебило бы
-            триггеры шаблона, и облачко с заметкой никогда не получило бы акцентный цвет.
-        -->
-        <Style x:Key="CardGlyph" TargetType="Path">
-            <Setter Property="Width" Value="16" />
-            <Setter Property="Height" Value="16" />
-            <Setter Property="Stretch" Value="Uniform" />
-            <Setter Property="Fill" Value="{DynamicResource TextBrush}" />
         </Style>
 
         <!--
@@ -395,8 +378,9 @@
                                            Visibility="{Binding IsFlagged, Converter={StaticResource BoolToVisibility}}" />
 
                                 <Grid Grid.Column="1" Margin="9,8,8,8">
+                                    <!-- Заголовок, заметка, чеклист. Яруса с иконками у карточки нет:
+                                         заметка и пункты видны сами по себе, а строку он занимал всегда. -->
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
@@ -460,41 +444,8 @@
                                         </Button>
                                     </Grid>
 
-                                    <!--
-                                        Ярус 2 существует, только когда на нём что-то есть: облачко
-                                        заметки или счётчик чеклиста. У обычной задачи из одного
-                                        заголовка он занимал целую строку впустую.
-                                    -->
-                                    <Grid Grid.Row="1" Margin="0,4,0,0"
-                                          Visibility="{Binding HasSecondTier, Converter={StaticResource BoolToVisibility}}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <Button Grid.Column="0"
-                                                Style="{StaticResource CardIconButton}"
-                                                Command="{Binding ToggleNoteCommand}"
-                                                Visibility="{Binding HasNotes, Converter={StaticResource BoolToVisibility}}"
-                                                ToolTip="Заметка">
-                                            <Path x:Name="NoteIcon"
-                                                  Style="{StaticResource CardGlyph}"
-                                                  Data="{StaticResource NoteGlyph}" />
-                                        </Button>
-
-                                        <!-- Счётчик чеклиста: «сделано/всего», виден только когда пункты есть. -->
-                                        <TextBlock Grid.Column="1"
-                                                   x:Name="SubtaskCounter"
-                                                   Text="{Binding SubtaskCounter}"
-                                                   Visibility="{Binding HasSubtasks, Converter={StaticResource BoolToVisibility}}"
-                                                   Foreground="{DynamicResource MutedBrush}"
-                                                   FontSize="12"
-                                                   VerticalAlignment="Center"
-                                                   HorizontalAlignment="Left" />
-                                    </Grid>
-
                                     <!-- Развёрнутая заметка. Пустая — это поле для её добавления. -->
-                                    <TextBox Grid.Row="2"
+                                    <TextBox Grid.Row="1"
                                              x:Name="NoteEditor"
                                              Style="{StaticResource NoteTextBox}"
                                              Margin="0,6,0,0"
@@ -511,7 +462,7 @@
                                         одну задачу на всё окно, но и обрезанных пунктов быть не должно.
                                     -->
                                     <!-- Отступ слева: чеклист подчинён заголовку, а не стоит с ним вровень. -->
-                                    <StackPanel Grid.Row="3"
+                                    <StackPanel Grid.Row="2"
                                                 Margin="10,6,0,0"
                                                 Visibility="{Binding ShowChecklist, Converter={StaticResource BoolToVisibility}}">
                                         <ListBox x:Name="SubtaskList"
@@ -555,17 +506,6 @@
                                 <Setter TargetName="TitleEditor" Property="Visibility" Value="Visible" />
                             </DataTrigger>
 
-                            <!-- Всё сделано — счётчик перестаёт быть служебной серой цифрой. -->
-                            <DataTrigger Binding="{Binding AllSubtasksDone}" Value="True">
-                                <Setter TargetName="SubtaskCounter" Property="Foreground" Value="{DynamicResource AccentBrush}" />
-                            </DataTrigger>
-
-                            <!-- Карточку вытащил в фильтр чеклист: показываем, за что именно. -->
-                            <DataTrigger Binding="{Binding IsSubtaskMatch}" Value="True">
-                                <Setter TargetName="SubtaskCounter" Property="Foreground" Value="{DynamicResource AccentBrush}" />
-                                <Setter TargetName="SubtaskCounter" Property="FontWeight" Value="SemiBold" />
-                            </DataTrigger>
-
                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                                 <Setter TargetName="Card" Property="Background" Value="{DynamicResource CardHoverBrush}" />
                             </DataTrigger>
@@ -604,10 +544,6 @@
                                     </BeginStoryboard>
                                 </MultiDataTrigger.EnterActions>
                             </MultiDataTrigger>
-
-                            <DataTrigger Binding="{Binding HasNotes}" Value="True">
-                                <Setter TargetName="NoteIcon" Property="Fill" Value="{DynamicResource AccentBrush}" />
-                            </DataTrigger>
 
                             <!-- Важность — состояние, а не только кнопка: у отмеченной задачи знак виден всегда. -->
                             <DataTrigger Binding="{Binding IsFlagged}" Value="True">

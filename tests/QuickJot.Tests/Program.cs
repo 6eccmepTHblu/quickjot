@@ -170,10 +170,10 @@ internal static class Program
 
         var card = vm.Tasks[0];
         Check(card.Notes == "подробности", $"заметка не сохранилась: «{card.Notes}»");
-        Check(card.HasNotes, "облачко не считает, что заметка есть");
+        Check(card.HasNotes, "карточка не считает, что заметка есть");
 
         card.ToggleFlagCommand.Execute(null);
-        card.ToggleNoteCommand.Execute(null);
+        card.IsExpanded = !card.IsExpanded;
         Check(card.IsFlagged, "важность не переключилась");
         Check(card.IsExpanded, "заметка не развернулась");
 
@@ -667,13 +667,12 @@ internal static class Program
         card.AddSubtask("согласовать с Димой");
         card.AddSubtask("выложить");
 
-        Check(card.SubtaskCounter == "0/3", $"счётчик показывает «{card.SubtaskCounter}»");
+        Check(card.Subtasks.Count == 3 && card.SubtasksDone == 0, "пункты добавились не так");
         Check(repo.Find(card.Id)!.Subtasks == "[ ] собрать список полей\n[ ] согласовать с Димой\n[ ] выложить",
             "чеклист не записался в базу");
 
         card.Subtasks[0].ToggleCommand.Execute(null);
-        Check(card.SubtaskCounter == "1/3", "выполнение пункта не дошло до счётчика");
-        Check(!card.AllSubtasksDone, "задача не может считаться закрытой с одним выполненным пунктом");
+        Check(card.SubtasksDone == 1, "выполнение пункта не дошло до карточки");
 
         // Пункты переставляются позиционно: sort_order тут не нужен.
         card.MoveSubtask(card.Subtasks[2], -1);
@@ -687,28 +686,26 @@ internal static class Program
         Check(repo.Find(card.Id)!.Subtasks!.Contains("[x] собрать"), "отмена перестановки сбросила выполнение");
 
         card.Subtasks[1].DeleteCommand.Execute(null);
-        Check(card.SubtaskCounter == "1/2", "удаление пункта не дошло до счётчика");
+        Check(card.Subtasks.Count == 2, "удаление пункта не дошло до карточки");
 
         vm.UndoCommand.Execute(null);
-        Check(card.SubtaskCounter == "1/3", "отмена не вернула удалённый пункт");
+        Check(card.Subtasks.Count == 3 && card.SubtasksDone == 1, "отмена не вернула удалённый пункт");
 
-        // Задача при полностью закрытом чеклисте сама не выполняется — только счётчик меняет вид.
+        // Полностью закрытый чеклист саму задачу не выполняет.
         foreach (var subtask in card.Subtasks) subtask.IsDone = true;
-        Check(card.AllSubtasksDone, "все пункты выполнены, а признак не выставился");
         Check(!card.IsCompleted, "чеклист не должен закрывать саму задачу");
 
         // Поиск идёт и по пунктам: в большой задаче нужное чаще всего именно там.
         vm.Draft = "Димой";
         Check(vm.VisibleTasks.Contains(card), "фильтр не нашёл задачу по тексту пункта");
-        Check(card.IsSubtaskMatch, "счётчик не помечен, хотя карточку вытащил именно чеклист");
 
-        vm.Draft = "большая";
-        Check(!card.IsSubtaskMatch, "совпадение по заголовку не должно помечать счётчик");
+        vm.Draft = "нет такого текста";
+        Check(!vm.VisibleTasks.Contains(card), "фильтр показывает задачу без совпадений");
 
         vm.Draft = "";
         var reopened = new MainViewModel(repo);
         reopened.Load();
-        Check(reopened.Tasks[0].SubtaskCounter == "3/3", "чеклист не пережил перезапуск");
+        Check(reopened.Tasks[0].SubtasksDone == 3, "чеклист не пережил перезапуск");
     }
 
     /// <summary>
