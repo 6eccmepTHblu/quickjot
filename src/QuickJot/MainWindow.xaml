@@ -413,9 +413,15 @@
                                            Fill="{DynamicResource AccentBrush}"
                                            Visibility="{Binding IsFlagged, Converter={StaticResource BoolToVisibility}}" />
 
-                                <Grid Grid.Column="1" Margin="9,8,8,8">
+                                <Grid Grid.Column="1" Margin="5,8,8,8">
                                     <!-- Заголовок, теги, заметка, чеклист. Яруса с иконками у карточки нет:
-                                         всё это видно само по себе, а строку он занимал всегда. -->
+                                         всё это видно само по себе, а строку он занимал всегда.
+                                         Слева — колонка под корешок; место под него держится всегда,
+                                         иначе заголовки карточек с содержимым и без разъезжались бы. -->
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="14" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
@@ -423,8 +429,34 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
+                                    <!--
+                                        Корешок чеклиста — раздел 8. Идёт вдоль пунктов, напротив их
+                                        чекбоксов, и сворачивает карточку по клику. У описания его нет:
+                                        это корешок списка, а не всего содержимого. У свёрнутой карточки
+                                        остаётся коротким штрихом у заголовка, иначе развернуть её мышью
+                                        было бы нечем. Строка задаётся триггером ниже.
+                                        Линия тонкая, а попадать по ней надо мышью, поэтому нажимается вся колонка.
+                                    -->
+                                    <Border x:Name="Spine"
+                                            Grid.Column="0"
+                                            Grid.Row="0"
+                                            Grid.RowSpan="4"
+                                            Background="Transparent"
+                                            Cursor="Hand"
+                                            Margin="0,1,0,1"
+                                            MouseLeftButtonUp="OnSpineClicked"
+                                            ToolTip="Свернуть или развернуть"
+                                            Visibility="{Binding HasSubtasks, Converter={StaticResource BoolToVisibility}}">
+                                        <Border x:Name="SpineLine"
+                                                Width="2"
+                                                CornerRadius="1"
+                                                HorizontalAlignment="Left"
+                                                Margin="1,0,0,0"
+                                                Background="{DynamicResource SpineBrush}" />
+                                    </Border>
+
                                     <!-- Ярус 1: чекбокс, заголовок, важность -->
-                                    <Grid Grid.Row="0">
+                                    <Grid Grid.Row="0" Grid.Column="1">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
@@ -484,6 +516,7 @@
                                     <!-- Чипы тегов — раздел 8. Видны и у свёрнутой карточки: тег
                                          нужен, чтобы узнавать задачу в списке, а не только внутри неё. -->
                                     <ItemsControl Grid.Row="1"
+                                                  Grid.Column="1"
                                                   ItemsSource="{Binding Tags}"
                                                   Margin="0,5,0,1"
                                                   Visibility="{Binding HasTags, Converter={StaticResource BoolToVisibility}}">
@@ -511,6 +544,7 @@
 
                                     <!-- Развёрнутая заметка. Пустая — это поле для её добавления. -->
                                     <TextBox Grid.Row="2"
+                                             Grid.Column="1"
                                              x:Name="NoteEditor"
                                              Style="{StaticResource NoteTextBox}"
                                              Margin="0,6,0,0"
@@ -528,7 +562,8 @@
                                     -->
                                     <!-- Отступ слева: чеклист подчинён заголовку, а не стоит с ним вровень. -->
                                     <StackPanel Grid.Row="3"
-                                                Margin="10,6,0,0"
+                                                Grid.Column="1"
+                                                Margin="0,6,0,0"
                                                 Visibility="{Binding ShowChecklist, Converter={StaticResource BoolToVisibility}}">
                                         <ListBox x:Name="SubtaskList"
                                                  ItemsSource="{Binding Subtasks}"
@@ -574,6 +609,18 @@
                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                                 <Setter TargetName="Card" Property="Background" Value="{DynamicResource CardHoverBrush}" />
                             </DataTrigger>
+
+                            <!-- Развёрнутая: линия стоит ровно вдоль пунктов чеклиста, не задевая описание. -->
+                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                <Setter TargetName="Spine" Property="Grid.Row" Value="3" />
+                                <Setter TargetName="Spine" Property="Grid.RowSpan" Value="1" />
+                            </DataTrigger>
+
+                            <!-- Корешок под курсором заметно светлеет: иначе непонятно, что по нему кликают. -->
+                            <Trigger SourceName="Spine" Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SpineLine" Property="Background" Value="{DynamicResource SpineHoverBrush}" />
+                                <Setter TargetName="SpineLine" Property="Width" Value="3" />
+                            </Trigger>
 
                             <!-- Выделение: заливка акцентом 12% плюс фокусное кольцо — раздел 15. -->
                             <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">

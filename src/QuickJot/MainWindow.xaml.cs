@@ -895,6 +895,15 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Двойной клик по заголовку открывает правку — таблица «Мышь», раздел 10.</summary>
+    /// <summary>Клик по корешку — свернуть или развернуть карточку. То же, что `→` и `←`.</summary>
+    private void OnSpineClicked(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not TaskCardViewModel card) return;
+
+        card.IsExpanded = !card.IsExpanded;
+        e.Handled = true;
+    }
+
     private void OnTitleClicked(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount != 2) return;

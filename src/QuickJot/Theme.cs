@@ -35,6 +35,10 @@ internal static class Theme
         resources["NoteSurfaceBrush"] = Tinted(dark ? 0x14 : 0x0D, tone);
         resources["DividerBrush"] = Tinted(dark ? 0x1F : 0x1A, tone);
 
+        // Корешок карточки: заметен ровно настолько, чтобы его нашли, и не спорит с текстом.
+        resources["SpineBrush"] = Tinted(dark ? 0x24 : 0x1F, tone);
+        resources["SpineHoverBrush"] = Tinted(dark ? 0x5A : 0x4A, tone);
+
         // Шпаргалка накрывает окно целиком и должна быть непрозрачной: сквозь любую полупрозрачную
         // подложку текст карточек продолжает читаться и мешает. Тост лежит поверх карточек — тоже плотный.
         resources["ScrimBrush"] = Solid(dark ? Color.FromRgb(0x1F, 0x1F, 0x1F) : Color.FromRgb(0xFA, 0xFA, 0xFA));

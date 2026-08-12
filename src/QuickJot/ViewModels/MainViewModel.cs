@@ -875,6 +875,7 @@ public sealed partial class TaskCardViewModel : ObservableObject
 
     public bool HasNotes => !string.IsNullOrWhiteSpace(Notes);
 
+
     // --- теги, раздел 8 ---
 
     public ObservableCollection<TagChip> Tags { get; } = [];
