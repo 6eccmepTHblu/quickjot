@@ -17,6 +17,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Высота строки заголовка относительно кегля — из неё считается потолок в N строк.</summary>
     private const double LineHeightRatio = 1.35;
 
+    /// <summary>
+    /// Высота строки чеклиста в DIP. Потолок списка кратен ей, иначе прокрутка режет пункт пополам.
+    /// Величина постоянная: у пунктов свой кегль 13 и одна строка, кегль заголовка на них не влияет.
+    /// </summary>
+    private const double SubtaskRowHeight = 34;
+
     /// <summary>Сколько выполненная задача остаётся на месте, прежде чем уехать в блок — раздел 9.</summary>
     private static readonly TimeSpan CompletionDelay = TimeSpan.FromMilliseconds(1500);
 
@@ -133,6 +139,12 @@ public sealed partial class MainViewModel : ObservableObject
 
     public double TitleMaxHeight => TitleLines * TitleLineHeight;
 
+    /// <summary>Сколько пунктов чеклиста видно без прокрутки, 3–20 — раздел 8.</summary>
+    public int SubtaskLines { get; private set; }
+
+    /// <summary>Потолок списка пунктов: ровно N строк, чтобы обрезанных пунктов не было.</summary>
+    public double SubtaskListMaxHeight => SubtaskLines * SubtaskRowHeight;
+
     /// <summary>Угол привязки окна — раздел 5.</summary>
     public AnchorCorner Corner { get; private set; }
 
@@ -171,6 +183,8 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(TitleFontSize));
         OnPropertyChanged(nameof(TitleLineHeight));
         OnPropertyChanged(nameof(TitleMaxHeight));
+        OnPropertyChanged(nameof(SubtaskLines));
+        OnPropertyChanged(nameof(SubtaskListMaxHeight));
     }
 
     private void ReadSettings()
@@ -178,6 +192,7 @@ public sealed partial class MainViewModel : ObservableObject
         TitleLines = (int)Math.Clamp(_settings?.GetDouble(SettingKeys.TitleLines, 2) ?? 2, 1, 4);
         TitleFont = _settings?.Get(SettingKeys.TitleFont) ?? "Segoe UI Variable Text";
         TitleFontSize = Math.Clamp(_settings?.GetDouble(SettingKeys.TitleSize, 14) ?? 14, 11, 20);
+        SubtaskLines = (int)Math.Clamp(_settings?.GetDouble(SettingKeys.SubtaskLines, 6) ?? 6, 3, 20);
 
         Corner = Enum.TryParse<AnchorCorner>(_settings?.Get(SettingKeys.Corner), out var corner)
             ? corner

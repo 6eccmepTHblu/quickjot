@@ -12,6 +12,7 @@ public static class SettingKeys
     public const string TitleLines = "card.title_lines";
     public const string TitleFont = "card.title_font";
     public const string TitleSize = "card.title_size";
+    public const string SubtaskLines = "card.subtask_lines";
 
     public const string Theme = "ui.theme";
     public const string Animations = "ui.animations";

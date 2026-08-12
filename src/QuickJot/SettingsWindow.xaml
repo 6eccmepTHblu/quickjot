@@ -226,6 +226,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Строк в заголовке" Style="{StaticResource Label}" />
@@ -243,6 +244,13 @@
                                 Value="{Binding TitleSize}" />
                         <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Value}"
                                    Text="{Binding TitleSize, StringFormat={}{0:F0} px}" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Пунктов чеклиста" Style="{StaticResource Label}" />
+                        <Slider Grid.Row="3" Grid.Column="1" Minimum="3" Maximum="20" TickFrequency="1"
+                                ToolTip="Сколько пунктов видно без прокрутки"
+                                Value="{Binding SubtaskLines}" />
+                        <TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource Value}"
+                                   Text="{Binding SubtaskLines}" />
                     </Grid>
                 </StackPanel>
             </Border>

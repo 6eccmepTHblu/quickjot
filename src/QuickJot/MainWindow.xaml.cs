@@ -572,6 +572,10 @@ public partial class MainWindow : Window
 
         index = Math.Clamp(index, 0, list.Items.Count - 1);
         list.SelectedIndex = index;
+
+        // Длинный чеклист прокручивается внутри карточки, и строки за пределами видимой части
+        // ещё не созданы: без ScrollIntoView контейнера просто нет и фокусировать нечего.
+        list.ScrollIntoView(list.Items[index]);
         list.UpdateLayout();
 
         if (list.ItemContainerGenerator.ContainerFromIndex(index) is ListBoxItem row) row.Focus();

@@ -513,9 +513,9 @@
 
                                     <!--
                                         Чеклист под заметкой — раздел 8. Заметка отвечает «про что задача»,
-                                        чеклист — «что в ней осталось». Своего потолка высоты у него нет:
-                                        вложенная прокрутка резала пункт пополам и перехватывала колесо,
-                                        а окно и так прокручивается целиком.
+                                        чеклист — «что в ней осталось». Потолок высоты кратен строке
+                                        и задаётся настройкой: длинный список не должен растягивать
+                                        одну задачу на всё окно, но и обрезанных пунктов быть не должно.
                                     -->
                                     <!-- Отступ слева: чеклист подчинён заголовку, а не стоит с ним вровень. -->
                                     <StackPanel Grid.Row="3"
@@ -526,6 +526,8 @@
                                                  ItemTemplate="{StaticResource SubtaskTemplate}"
                                                  ItemContainerStyle="{StaticResource SubtaskRow}"
                                                  Visibility="{Binding HasSubtasks, Converter={StaticResource BoolToVisibility}}"
+                                                 MaxHeight="{Binding DataContext.SubtaskListMaxHeight, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                                                  Background="Transparent"
                                                  BorderThickness="0"
                                                  Padding="0"

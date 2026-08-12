@@ -97,6 +97,10 @@ public partial class App : Application
             if (!string.IsNullOrEmpty(query) && _viewModel is not null) _viewModel.Draft = query;
 
             ShowWindow();
+
+            // QUICKJOT_DEV_SETTINGS=1 — сразу открыть настройки: из скрипта до них иначе не добраться,
+            // они открываются только из меню в трее.
+            if (Environment.GetEnvironmentVariable("QUICKJOT_DEV_SETTINGS") == "1") ShowSettings();
         }
     }
 

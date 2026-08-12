@@ -515,12 +515,24 @@ internal static class Program
         Check(Math.Abs(vm.WindowWidth - 700) < 0.5, "ширина не перечиталась");
         Check(vm.Theme == "dark" && !vm.AnimationsEnabled, "тема или анимации не перечитались");
 
+        // Потолок чеклиста считается целыми строками, иначе прокрутка режет пункт пополам.
+        Check(vm.SubtaskLines == 6, "по умолчанию чеклист показывает не 6 пунктов");
+        double rowHeight = vm.SubtaskListMaxHeight / vm.SubtaskLines;
+
+        settings.SetDouble(SettingKeys.SubtaskLines, 4);
+        vm.ReloadSettings();
+        Check(vm.SubtaskLines == 4, "число видимых пунктов не перечиталось");
+        Check(Math.Abs(vm.SubtaskListMaxHeight - 4 * rowHeight) < 0.001,
+            $"потолок чеклиста не равен четырём строкам: {vm.SubtaskListMaxHeight}");
+
         // Значения из базы могут быть любыми: настройки правит и человек, и предыдущая версия.
         settings.SetDouble(SettingKeys.TitleLines, 9);
         settings.SetDouble(SettingKeys.Width, 99999);
         settings.SetDouble(SettingKeys.MaxHeightShare, 5);
+        settings.SetDouble(SettingKeys.SubtaskLines, 99);
         vm.ReloadSettings();
 
+        Check(vm.SubtaskLines == 20, "число видимых пунктов не ограничено сверху");
         Check(vm.TitleLines == 4, "лимит строк не ограничен сверху");
         Check(Math.Abs(vm.WindowWidth - 1200) < 0.5, "ширина не ограничена сверху");
         Check(Math.Abs(vm.MaxHeightShare - 0.95) < 0.001, "потолок высоты не ограничен сверху");

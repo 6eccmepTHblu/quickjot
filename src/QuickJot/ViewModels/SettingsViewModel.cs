@@ -24,6 +24,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _titleLines = (int)settings.GetDouble(SettingKeys.TitleLines, 2);
         _titleFont = settings.Get(SettingKeys.TitleFont) ?? "Segoe UI Variable Text";
         _titleSize = settings.GetDouble(SettingKeys.TitleSize, 14);
+        _subtaskLines = (int)settings.GetDouble(SettingKeys.SubtaskLines, 6);
         _theme = settings.Get(SettingKeys.Theme) ?? "system";
         _animations = settings.GetBool(SettingKeys.Animations, true);
         _runAsAdmin = settings.GetBool(SettingKeys.AutostartAdmin, false);
@@ -66,6 +67,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private int _titleLines;
     [ObservableProperty] private string _titleFont;
     [ObservableProperty] private double _titleSize;
+    [ObservableProperty] private int _subtaskLines;
     [ObservableProperty] private string _theme;
     [ObservableProperty] private bool _animations;
     [ObservableProperty] private bool _autostartEnabled;
@@ -101,6 +103,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnTitleLinesChanged(int value) => SaveDouble(SettingKeys.TitleLines, value);
     partial void OnTitleFontChanged(string value) => Save(SettingKeys.TitleFont, value);
     partial void OnTitleSizeChanged(double value) => SaveDouble(SettingKeys.TitleSize, Math.Round(value));
+    partial void OnSubtaskLinesChanged(int value) => SaveDouble(SettingKeys.SubtaskLines, value);
     partial void OnThemeChanged(string value) => Save(SettingKeys.Theme, value);
     partial void OnAnimationsChanged(bool value) => SaveBool(SettingKeys.Animations, value);
 
