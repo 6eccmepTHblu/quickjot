@@ -26,6 +26,7 @@ public partial class App : Application
 
     private Mutex? _instanceLock;
     private SettingsWindow? _settingsWindow;
+    private TagsWindow? _tagsWindow;
     private EventWaitHandle? _showSignal;
     private SqliteConnection? _db;
     private TaskbarIcon? _tray;
@@ -98,9 +99,10 @@ public partial class App : Application
 
             ShowWindow();
 
-            // QUICKJOT_DEV_SETTINGS=1 — сразу открыть настройки: из скрипта до них иначе не добраться,
-            // они открываются только из меню в трее.
+            // QUICKJOT_DEV_SETTINGS=1 и QUICKJOT_DEV_TAGS=1 — сразу открыть окно настроек или тегов:
+            // из скрипта до них иначе не добраться, они открываются только из меню в трее.
             if (Environment.GetEnvironmentVariable("QUICKJOT_DEV_SETTINGS") == "1") ShowSettings();
+            if (Environment.GetEnvironmentVariable("QUICKJOT_DEV_TAGS") == "1") ShowTags();
         }
     }
 
@@ -119,6 +121,10 @@ public partial class App : Application
         if (!string.IsNullOrEmpty(corner)) Settings.Set("window.corner", corner);
 
         if (Tasks.Active().Count > 0) return;
+
+        var tagged = Tasks.Create("Реализовать тэги для Квикшота", tags: "development ui/ux");
+        Tasks.SetFlagged(tagged.Id, true);
+        Tasks.Create("Перенести данные радара", tags: "работа");
 
         Tasks.Create("короткая задача");
         var withNote = Tasks.Create("задача с заметкой", $"первая строка{Environment.NewLine}вторая строка");
@@ -163,15 +169,19 @@ public partial class App : Application
         var show = new MenuItem { Header = "Показать" };
         show.Click += (_, _) => ShowWindow();
 
+        var tags = new MenuItem { Header = "Теги" };
+        tags.Click += (_, _) => ShowTags();
+
         var settings = new MenuItem { Header = "Настройки" };
         settings.Click += (_, _) => ShowSettings();
 
         var exit = new MenuItem { Header = "Выход" };
         exit.Click += (_, _) => Shutdown();
 
-        // Показать · Настройки · Выход — раздел 14.
+        // Показать · Теги · Настройки · Выход — раздел 14.
         var menu = new ContextMenu();
         menu.Items.Add(show);
+        menu.Items.Add(tags);
         menu.Items.Add(settings);
         menu.Items.Add(new Separator());
         menu.Items.Add(exit);
@@ -225,10 +235,33 @@ public partial class App : Application
         _settingsWindow.Show();
     }
 
+    /// <summary>Окно тегов — раздел 13. Тоже одно на приложение.</summary>
+    private void ShowTags()
+    {
+        if (_tagsWindow is not null)
+        {
+            _tagsWindow.Activate();
+            return;
+        }
+
+        var theme = Settings.Get(SettingKeys.Theme);
+        // Тот же экземпляр, что у списка задач: иначе оба закешируют свою карту цветов.
+        var viewModel = new TagsViewModel(Tasks, _viewModel?.TagColors ?? new TagColors(Settings), theme);
+
+        // Список задач держит свои чипы в памяти — он и должен узнать об изменениях.
+        viewModel.ColorsChanged += () => _viewModel?.RefreshTagColors();
+        viewModel.Removed += tag => _viewModel?.ForgetTag(tag);
+
+        _tagsWindow = new TagsWindow(viewModel, theme);
+        _tagsWindow.Closed += (_, _) => _tagsWindow = null;
+        _tagsWindow.Show();
+    }
+
     private void ApplySettings()
     {
         _viewModel?.ReloadSettings();
         ApplyTheme();
+        _viewModel?.RefreshTagColors(); // тема могла смениться — чипы считают цвет от неё
         _window?.ApplySettings();
     }
 

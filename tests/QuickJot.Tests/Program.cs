@@ -36,6 +36,8 @@ internal static class Program
         Run("перетаскивание порядка мышью", DragReorder);
         Run("задачи лежат в самой базе, а не только в -wal", DataLandsInTheDatabaseFile);
         Run("чеклист: формат хранения", SubtaskFormatRoundTrip);
+        Run("теги: разбор строки ввода", TagParsing);
+        Run("теги: создание, правка, фильтр, удаление", Tags);
         Run("чеклист: правка, порядок, отмена, фильтр", Checklist);
 
         Console.WriteLine(_failures == 0 ? "\nвсе проверки прошли" : $"\nпровалено: {_failures}");
@@ -651,6 +653,80 @@ internal static class Program
         Check(SubtaskFormat.Format([]) is null, "пустой чеклист должен быть NULL, а не пустой строкой");
         Check(SubtaskFormat.Format([new Subtask(false, "   ")]) is null, "пункт из пробелов должен отбрасываться");
         Check(SubtaskFormat.Parse(null).Count == 0, "NULL должен читаться как пустой чеклист");
+    }
+
+    /// <summary>
+    /// Теги вводятся в той же строке, что и заголовок, — раздел 7. Разбор этой строки решает всё,
+    /// поэтому проверяется отдельно от базы.
+    /// </summary>
+    private static void TagParsing()
+    {
+        var (title, tags) = TagFormat.Split("  Сделать отчёт #Работа #срочно #работа  ");
+        Check(title == "Сделать отчёт", $"заголовок разобран как «{title}»");
+        Check(tags.SequenceEqual(["работа", "срочно"]), "теги разобраны не так: " + string.Join(",", tags));
+
+        Check(TagFormat.Split("просто текст").Tags.Count == 0, "текст без решётки не должен давать тегов");
+        Check(TagFormat.Split("#только-тег").Title.Length == 0, "из одних тегов заголовка не получается");
+
+        // Решётка в середине слова тегом не делает: «C#» — это язык, а не тег.
+        Check(TagFormat.Split("выучить C# получше").Tags.Count == 0, "решётка в середине слова стала тегом");
+
+        Check(TagFormat.Normalize("#UI/UX") == "ui/ux", "нормализация испортила тег");
+        Check(TagFormat.Normalize("#!!!") is null, "из одних знаков тега быть не может");
+        Check(TagFormat.Compose("Отчёт", ["работа"]) == "Отчёт #работа", "обратная сборка строки не та");
+
+        // Подсказка растёт из последнего слова с решёткой перед кареткой.
+        Check(TagFormat.TypedTag("отчёт #раб", 10) == "раб", "набираемый тег определён не так");
+        Check(TagFormat.TypedTag("отчёт #раб ", 11) is null, "после пробела тег уже дописан");
+        Check(TagFormat.TypedTag("отчёт", 5) is null, "без решётки подсказки быть не должно");
+    }
+
+    /// <summary>Теги целиком: создание из строки, чипы, фильтр, правка и удаление из всех задач.</summary>
+    private static void Tags(TaskRepository repo)
+    {
+        var vm = new MainViewModel(repo);
+
+        vm.Draft = "Перенести радар #работа #сервер";
+        Check(vm.Create(), "задача не создалась");
+
+        var card = vm.Tasks[0];
+        Check(card.Title == "Перенести радар", $"теги не вырезаны из заголовка: «{card.Title}»");
+        Check(card.TagNames.SequenceEqual(["работа", "сервер"]), "теги не попали в карточку");
+        Check(repo.Find(card.Id)!.Tags == "работа сервер", "теги не записались в базу");
+
+        vm.Draft = "Купить кофе #дом";
+        vm.Create();
+
+        // Фильтр по тегу — по началу, чтобы работал уже на «#раб».
+        vm.Draft = "#раб";
+        Check(vm.VisibleTasks.Select(t => t.Title).SequenceEqual(["Перенести радар"]), "фильтр по тегу отобрал не то");
+
+        // Текст и тег вместе — это «и», а не «или».
+        vm.Draft = "кофе #работа";
+        Check(!vm.VisibleTasks.Any(), "текст и тег должны сходиться одновременно");
+
+        vm.Draft = "";
+
+        // Правка карточки идёт строкой целиком, вместе с тегами — раздел 8.
+        card.BeginEdit();
+        Check(card.EditTitle == "Перенести радар #работа #сервер", $"в правку попало «{card.EditTitle}»");
+        card.EditTitle = "Перенести радар #работа";
+        card.CommitEdit();
+        Check(card.TagNames.SequenceEqual(["работа"]), "тег не убрался правкой заголовка");
+        Check(repo.Find(card.Id)!.Tags == "работа", "снятый тег остался в базе");
+
+        // Отмена возвращает прежний набор целиком.
+        vm.UndoCommand.Execute(null);
+        Check(card.TagNames.SequenceEqual(["работа", "сервер"]), "отмена не вернула теги");
+
+        var usage = repo.TagUsage();
+        Check(usage.Any(pair => pair is { Tag: "работа", Count: 1 }), "счёт задач по тегу неверный");
+        Check(usage.Count == 3, $"тегов в справочнике {usage.Count}, ожидалось 3");
+
+        // Удаление тега из окна тегов стирает его во всех задачах.
+        Check(repo.RemoveTag("работа") == 1, "удаление тега затронуло не одну задачу");
+        Check(repo.Find(card.Id)!.Tags == "сервер", "тег не убрался из задачи");
+        Check(repo.TagUsage().All(pair => pair.Tag != "работа"), "удалённый тег остался в справочнике");
     }
 
     /// <summary>

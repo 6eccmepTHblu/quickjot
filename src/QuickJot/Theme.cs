@@ -60,6 +60,15 @@ internal static class Theme
         (byte)(color.G + (255 - color.G) * amount),
         (byte)(color.B + (255 - color.B) * amount));
 
+    /// <summary>Осветлить цвет — нужно и акценту, и чипам тегов в тёмной теме.</summary>
+    public static Color Lightened(Color color, double amount) => Lighten(color, amount);
+
+    /// <summary>Затемнить: в светлой теме текст чипа берётся отсюда.</summary>
+    public static Color Darkened(Color color, double amount) => Color.FromRgb(
+        (byte)(color.R * (1 - amount)),
+        (byte)(color.G * (1 - amount)),
+        (byte)(color.B * (1 - amount)));
+
     private static bool IsSystemDark()
     {
         using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(

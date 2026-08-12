@@ -293,15 +293,50 @@
             </Grid.RowDefinitions>
 
             <!-- MaxLength: жёсткий предел заголовка при наборе, раздел 7. Перелив вставки в заметку — в code-behind. -->
-            <Grid x:Name="InputArea" Grid.Row="0">
+            <StackPanel x:Name="InputArea" Grid.Row="0">
                 <TextBox x:Name="Input"
                          Style="{StaticResource PlainTextBox}"
                          Height="48"
                          FontSize="15"
                          MaxLength="500"
                          Tag="Новая задача"
+                         SelectionChanged="OnInputSelectionChanged"
                          Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" />
-            </Grid>
+
+                <!--
+                    Подсказка тегов — раздел 7. Не Popup, а обычная строка разметки: окно и так
+                    подстраивает высоту под содержимое, а Popup у окна поверх всех окон живёт
+                    своей жизнью с фокусом и порядком отрисовки.
+                -->
+                <ListBox x:Name="TagSuggestions"
+                         ItemsSource="{Binding Suggestions}"
+                         SelectedIndex="{Binding SuggestionIndex}"
+                         Visibility="{Binding IsSuggesting, Converter={StaticResource BoolToVisibility}}"
+                         Background="{DynamicResource NoteSurfaceBrush}"
+                         BorderThickness="0"
+                         Focusable="False"
+                         Margin="0,0,0,6"
+                         MaxHeight="152"
+                         Padding="4"
+                         HorizontalContentAlignment="Stretch"
+                         ItemContainerStyle="{StaticResource SubtaskRow}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid MouseLeftButtonUp="OnSuggestionClicked" Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13"
+                                           Foreground="{DynamicResource TextBrush}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Hint}" FontSize="12"
+                                           Foreground="{DynamicResource MutedBrush}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </StackPanel>
 
             <!-- Поле заметки: раскрывается по Tab, сворачивается только пустым — раздел 7. -->
             <TextBox x:Name="Note"
@@ -378,9 +413,10 @@
                                            Visibility="{Binding IsFlagged, Converter={StaticResource BoolToVisibility}}" />
 
                                 <Grid Grid.Column="1" Margin="9,8,8,8">
-                                    <!-- Заголовок, заметка, чеклист. Яруса с иконками у карточки нет:
-                                         заметка и пункты видны сами по себе, а строку он занимал всегда. -->
+                                    <!-- Заголовок, теги, заметка, чеклист. Яруса с иконками у карточки нет:
+                                         всё это видно само по себе, а строку он занимал всегда. -->
                                     <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
@@ -444,8 +480,36 @@
                                         </Button>
                                     </Grid>
 
+                                    <!-- Чипы тегов — раздел 8. Видны и у свёрнутой карточки: тег
+                                         нужен, чтобы узнавать задачу в списке, а не только внутри неё. -->
+                                    <ItemsControl Grid.Row="1"
+                                                  ItemsSource="{Binding Tags}"
+                                                  Margin="0,5,0,1"
+                                                  Visibility="{Binding HasTags, Converter={StaticResource BoolToVisibility}}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{Binding Background}"
+                                                        CornerRadius="4"
+                                                        Padding="7,2"
+                                                        Margin="0,0,6,3"
+                                                        Cursor="Hand"
+                                                        MouseLeftButtonUp="OnTagClicked"
+                                                        ToolTip="Отобрать задачи с этим тегом">
+                                                    <TextBlock Text="{Binding Label}"
+                                                               Foreground="{Binding Foreground}"
+                                                               FontSize="12" />
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
                                     <!-- Развёрнутая заметка. Пустая — это поле для её добавления. -->
-                                    <TextBox Grid.Row="1"
+                                    <TextBox Grid.Row="2"
                                              x:Name="NoteEditor"
                                              Style="{StaticResource NoteTextBox}"
                                              Margin="0,6,0,0"
@@ -462,7 +526,7 @@
                                         одну задачу на всё окно, но и обрезанных пунктов быть не должно.
                                     -->
                                     <!-- Отступ слева: чеклист подчинён заголовку, а не стоит с ним вровень. -->
-                                    <StackPanel Grid.Row="2"
+                                    <StackPanel Grid.Row="3"
                                                 Margin="10,6,0,0"
                                                 Visibility="{Binding ShowChecklist, Converter={StaticResource BoolToVisibility}}">
                                         <ListBox x:Name="SubtaskList"

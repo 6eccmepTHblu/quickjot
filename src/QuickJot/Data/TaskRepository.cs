@@ -12,6 +12,9 @@ public sealed class TaskItem
     /// <summary>Чеклист строками «[x] текст» — формат в <see cref="SubtaskFormat"/>.</summary>
     public string? Subtasks { get; set; }
 
+    /// <summary>Теги через пробел, без решётки — формат в <see cref="TagFormat"/>.</summary>
+    public string? Tags { get; set; }
+
     public bool IsFlagged { get; set; }
     public bool IsExpanded { get; set; }
     public double SortOrder { get; set; }
@@ -33,7 +36,7 @@ public sealed class TaskRepository(SqliteConnection db)
     public int RenumberCount { get; private set; }
 
     private const string Columns =
-        "id, title, notes, subtasks, is_flagged, is_expanded, sort_order, completed_at, deleted_at, created_at, updated_at";
+        "id, title, notes, subtasks, tags, is_flagged, is_expanded, sort_order, completed_at, deleted_at, created_at, updated_at";
 
     public IReadOnlyList<TaskItem> Active() => db.Query<TaskItem>(
         $"SELECT {Columns} FROM tasks WHERE deleted_at IS NULL AND completed_at IS NULL ORDER BY sort_order").AsList();
@@ -46,7 +49,7 @@ public sealed class TaskRepository(SqliteConnection db)
         $"SELECT {Columns} FROM tasks WHERE id = @id", new { id });
 
     /// <summary>Новая задача встаёт в начало списка — раздел 9.</summary>
-    public TaskItem Create(string title, string? notes = null)
+    public TaskItem Create(string title, string? notes = null, string? tags = null)
     {
         var now = DateTime.UtcNow;
         var first = db.ExecuteScalar<double?>(
@@ -57,15 +60,16 @@ public sealed class TaskRepository(SqliteConnection db)
             Id = Guid.NewGuid().ToString(),
             Title = title,
             Notes = notes,
+            Tags = tags,
             SortOrder = (first ?? 0) - Step,
             CreatedAt = now,
             UpdatedAt = now,
         };
 
         db.Execute("""
-            INSERT INTO tasks (id, title, notes, is_flagged, is_expanded, sort_order, created_at, updated_at)
-            VALUES (@Id, @Title, @Notes, @IsFlagged, @IsExpanded, @SortOrder, @Now, @Now)
-            """, new { item.Id, item.Title, item.Notes, item.IsFlagged, item.IsExpanded, item.SortOrder, Now = Db.Iso(now) });
+            INSERT INTO tasks (id, title, notes, tags, is_flagged, is_expanded, sort_order, created_at, updated_at)
+            VALUES (@Id, @Title, @Notes, @Tags, @IsFlagged, @IsExpanded, @SortOrder, @Now, @Now)
+            """, new { item.Id, item.Title, item.Notes, item.Tags, item.IsFlagged, item.IsExpanded, item.SortOrder, Now = Db.Iso(now) });
 
         return item;
     }
@@ -73,6 +77,48 @@ public sealed class TaskRepository(SqliteConnection db)
     public void SetTitle(string id, string title) => Set("title", id, title);
     public void SetNotes(string id, string? notes) => Set("notes", id, notes);
     public void SetSubtasks(string id, string? subtasks) => Set("subtasks", id, subtasks);
+    public void SetTags(string id, string? tags) => Set("tags", id, tags);
+
+    /// <summary>Все теги с числом задач: список для окна тегов и для подсказки при вводе.</summary>
+    public IReadOnlyList<(string Tag, int Count)> TagUsage()
+    {
+        var counts = new Dictionary<string, int>();
+
+        foreach (var stored in db.Query<string?>("SELECT tags FROM tasks WHERE deleted_at IS NULL AND tags IS NOT NULL"))
+        {
+            foreach (var tag in TagFormat.Parse(stored)) counts[tag] = counts.GetValueOrDefault(tag) + 1;
+        }
+
+        return counts.OrderByDescending(pair => pair.Value)
+            .ThenBy(pair => pair.Key, StringComparer.Ordinal)
+            .Select(pair => (pair.Key, pair.Value))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Убрать тег из всех задач — удаление тега из окна тегов. Справочника тегов нет,
+    /// поэтому «удалить тег» означает ровно это: стереть его там, где он проставлен.
+    /// </summary>
+    public int RemoveTag(string tag)
+    {
+        var rows = db.Query<TagRow>(
+            "SELECT id, tags FROM tasks WHERE deleted_at IS NULL AND tags IS NOT NULL").AsList();
+
+        int touched = 0;
+        foreach (var row in rows)
+        {
+            var current = TagFormat.Parse(row.Tags);
+            var kept = current.Where(existing => existing != tag).ToList();
+            if (kept.Count == current.Count) continue;
+
+            SetTags(row.Id, TagFormat.Format(kept));
+            touched++;
+        }
+
+        return touched;
+    }
+
+    private sealed record TagRow(string Id, string? Tags);
     public void SetFlagged(string id, bool flagged) => Set("is_flagged", id, flagged);
     public void SetExpanded(string id, bool expanded) => Set("is_expanded", id, expanded);
 

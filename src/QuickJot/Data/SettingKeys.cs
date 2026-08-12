@@ -14,6 +14,8 @@ public static class SettingKeys
     public const string TitleSize = "card.title_size";
     public const string SubtaskLines = "card.subtask_lines";
 
+    public const string TagColors = "tags.colors";
+
     public const string Theme = "ui.theme";
     public const string Animations = "ui.animations";
 

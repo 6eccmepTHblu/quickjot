@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Media;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -28,6 +29,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private readonly TaskRepository _tasks;
     private readonly SettingsStore? _settings;
+    private readonly TagColors? _tagColors;
     private readonly ICollectionView _view;
     private static readonly TimeSpan ToastDuration = TimeSpan.FromSeconds(4);
 
@@ -40,6 +42,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         _tasks = tasks;
         _settings = settings;
+        _tagColors = settings is null ? null : new TagColors(settings);
         _now = now ?? (() => DateTime.Now); // подменяется проверкой полуночи в тестах
 
         ReadSettings();
@@ -220,6 +223,74 @@ public sealed partial class MainViewModel : ObservableObject
 
     public string CompletedHeader => $"{(IsCompletedExpanded ? "▾" : "▸")}  Выполнено сегодня · {CompletedToday.Count}";
 
+    // --- подсказка тегов при вводе, раздел 7 ---
+
+    /// <summary>Существующие теги, подходящие под набираемый. Пустой список — подсказки нет.</summary>
+    public ObservableCollection<TagSuggestion> Suggestions { get; } = [];
+
+    public bool IsSuggesting => Suggestions.Count > 0;
+
+    /// <summary>Выбранная строка подсказки: по ней ходят ↑↓, её подставляет Tab.</summary>
+    [ObservableProperty]
+    private int _suggestionIndex;
+
+    /// <summary>
+    /// Пересчитать подсказку под каретку. Вызывается на каждое изменение поля ввода:
+    /// решает, набирают ли сейчас тег, и что предложить.
+    /// </summary>
+    public void UpdateSuggestions(string text, int caret)
+    {
+        var typed = TagFormat.TypedTag(text, caret);
+
+        Suggestions.Clear();
+        if (typed is not null)
+        {
+            var usage = _tasks.TagUsage();
+
+            foreach (var (tag, count) in usage)
+            {
+                if (tag.StartsWith(typed, StringComparison.Ordinal)) Suggestions.Add(new TagSuggestion(tag, count, false));
+            }
+
+            // Создание нового тега — это та же подсказка, отдельной кнопки нет.
+            if (typed.Length > 0 && usage.All(pair => pair.Tag != typed))
+            {
+                Suggestions.Add(new TagSuggestion(typed, 0, true));
+            }
+        }
+
+        SuggestionIndex = 0;
+        OnPropertyChanged(nameof(IsSuggesting));
+    }
+
+    public void MoveSuggestion(int delta)
+    {
+        if (Suggestions.Count == 0) return;
+
+        SuggestionIndex = (SuggestionIndex + delta + Suggestions.Count) % Suggestions.Count;
+    }
+
+    public void CloseSuggestions()
+    {
+        if (Suggestions.Count == 0) return;
+
+        Suggestions.Clear();
+        OnPropertyChanged(nameof(IsSuggesting));
+    }
+
+    /// <summary>Подставить выбранный тег вместо набираемого. Возвращает новый текст и место каретки.</summary>
+    public (string Text, int Caret) ApplySuggestion(string text, int caret, TagSuggestion? chosen = null)
+    {
+        chosen ??= Suggestions.ElementAtOrDefault(SuggestionIndex);
+        if (chosen is null || TagFormat.TypedTag(text, caret) is null) return (text, caret);
+
+        int start = text.LastIndexOf(TagFormat.Marker, caret - 1);
+        var completed = $"{TagFormat.Marker}{chosen.Tag} ";
+
+        CloseSuggestions();
+        return (text[..start] + completed + text[caret..], start + completed.Length);
+    }
+
     /// <summary>Задачи после фильтра — то, что реально видно в списке.</summary>
     public IEnumerable<TaskCardViewModel> VisibleTasks => _view.Cast<TaskCardViewModel>();
 
@@ -231,10 +302,13 @@ public sealed partial class MainViewModel : ObservableObject
         : "Задач нет";
 
     /// <summary>Поле ввода одновременно создаёт и фильтрует, поэтому запрос — это черновик без краёв.</summary>
-    private string Filter => Draft.Trim();
+    private string Filter => TagFormat.Split(Draft.Trim()).Title;
+
+    /// <summary>`#тег` в поле ввода — фильтр по тегу; сравнение по началу, чтобы работало по мере набора.</summary>
+    private IReadOnlyList<string> FilterTags => TagFormat.Split(Draft.Trim()).Tags;
 
     /// <summary>При активном фильтре перетаскивание запрещено — раздел 9.</summary>
-    public bool IsFiltered => Filter.Length > 0;
+    public bool IsFiltered => Draft.Trim().Length > 0;
 
     /// <summary>
     /// Перетаскивание мышью — раздел 9. Индекс приходит в порядке показа, а соседи для sort_order
@@ -272,12 +346,47 @@ public sealed partial class MainViewModel : ObservableObject
             () => PlaceAt(card, newOrder, newIndex));
     }
 
+    /// <summary>Карточка со своими цветами тегов: их знает список, а не сама карточка.</summary>
+    private TaskCardViewModel NewCard(TaskItem item, bool isNew = false) =>
+        new(item, MakeChip) { IsNew = isNew };
+
+    private TagChip MakeChip(string tag)
+    {
+        int index = _tagColors?.Chosen(tag) ?? TagPalette.IndexOf(tag);
+        // Полное имя: у самой модели есть свойство Theme, и оно перекрывает класс.
+        bool dark = QuickJot.Theme.IsDark(Theme);
+
+        return new TagChip(tag, TagPalette.Background(index, dark), TagPalette.Foreground(index, dark));
+    }
+
+    /// <summary>
+    /// Хранилище выбранных цветов. Отдаётся наружу, чтобы окно тегов правило тот же экземпляр:
+    /// у своего оно бы закешировало карту, и список задач остался бы со старыми цветами.
+    /// </summary>
+    public TagColors? TagColors => _tagColors;
+
+    /// <summary>Цвета тегов сменились в окне тегов или вслед за темой — пересобрать чипы.</summary>
+    public void RefreshTagColors()
+    {
+        foreach (var card in Tasks) card.RefreshTagColors();
+        foreach (var card in CompletedToday) card.RefreshTagColors();
+    }
+
+    /// <summary>Тег удалили из окна тегов — убрать его из карточек, которые уже в памяти.</summary>
+    public void ForgetTag(string tag)
+    {
+        foreach (var card in Tasks.Concat(CompletedToday).ToList())
+        {
+            if (card.TagNames.Contains(tag)) card.SetTags(card.TagNames.Where(name => name != tag));
+        }
+    }
+
     public void Load()
     {
         foreach (var card in Tasks) Detach(card);
         Tasks.Clear();
 
-        foreach (var item in _tasks.Active()) Add(new TaskCardViewModel(item));
+        foreach (var item in _tasks.Active()) Add(NewCard(item));
 
         _lastRollover = _now().Date;
         ReloadCompleted();
@@ -320,7 +429,8 @@ public sealed partial class MainViewModel : ObservableObject
         // Свежие сверху — раздел 9. Репозиторий отдаёт их уже в этом порядке.
         foreach (var item in _tasks.CompletedSince(TodayStartUtc()))
         {
-            var card = new TaskCardViewModel(item) { IsCompleted = true };
+            var card = NewCard(item);
+            card.IsCompleted = true;
             card.PropertyChanged += OnCardChanged;
             card.DeleteRequested += OnDeleteRequested;
             CompletedToday.Add(card);
@@ -360,11 +470,24 @@ public sealed partial class MainViewModel : ObservableObject
         Tasks.Insert(index, card);
     }
 
-    /// <summary>Ищем и по заголовку, и по чеклисту: в большой задаче нужное чаще всего именно в пунктах.</summary>
-    private bool Matches(object item) => item is TaskCardViewModel card
-        && (Filter.Length == 0
+    /// <summary>
+    /// Ищем и по заголовку, и по чеклисту: в большой задаче нужное чаще всего именно в пунктах.
+    /// Теги — отдельным условием и по «и»: «радар #работа» это радар среди рабочих, а не радар или рабочее.
+    /// </summary>
+    private bool Matches(object item)
+    {
+        if (item is not TaskCardViewModel card) return false;
+
+        foreach (var tag in FilterTags)
+        {
+            // По началу, а не по совпадению целиком: фильтр должен работать уже на «#раб».
+            if (!card.TagNames.Any(name => name.StartsWith(tag, StringComparison.OrdinalIgnoreCase))) return false;
+        }
+
+        return Filter.Length == 0
             || card.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase)
-            || card.Subtasks.Any(s => s.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase)));
+            || card.Subtasks.Any(s => s.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase));
+    }
 
     partial void OnDraftChanged(string value)
     {
@@ -389,11 +512,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Enter или Ctrl+Enter. false — создавать нечего, заголовок пуст.</summary>
     public bool Create()
     {
-        var title = Draft.Trim();
+        // Теги вводятся в той же строке и вырезаются из заголовка — раздел 8.
+        var (title, tags) = TagFormat.Split(Draft.Trim());
         if (title.Length == 0) return false;
 
         var notes = string.IsNullOrWhiteSpace(NoteDraft) ? null : NoteDraft.Trim();
-        var card = new TaskCardViewModel(_tasks.Create(title, notes)) { IsNew = true };
+        var card = NewCard(_tasks.Create(title, notes, TagFormat.Format(tags)), isNew: true);
         Add(card, atTop: true); // новые в начало списка — раздел 9
         Record("Задача создана", () => RemoveCard(card), () => RestoreCard(card));
 
@@ -575,6 +699,21 @@ public sealed partial class MainViewModel : ObservableObject
                 break;
             }
 
+            // Теги пишутся целиком, как чеклист: набор правится строкой заголовка, а не по одному.
+            case nameof(TaskCardViewModel.TagsText):
+            {
+                var previous = card.Item.Tags;
+                var current = card.TagsText;
+                if (previous == current) break;
+
+                _tasks.SetTags(card.Id, current);
+                card.Item.Tags = current;
+                Record("Теги изменены",
+                    () => card.SetTags(TagFormat.Parse(previous)),
+                    () => card.SetTags(TagFormat.Parse(current)));
+                break;
+            }
+
             // Чеклист пишется целиком: отмена возвращает прежнюю строку, а не отдельный пункт.
             case nameof(TaskCardViewModel.SubtasksText):
             {
@@ -591,6 +730,26 @@ public sealed partial class MainViewModel : ObservableObject
     }
 }
 
+/// <summary>Строка подсказки тегов: существующий тег с числом задач либо предложение создать новый.</summary>
+public sealed record TagSuggestion(string Tag, int Count, bool IsNew)
+{
+    public string Label => TagFormat.Marker + Tag;
+
+    public string Hint => IsNew ? "создать" : Count.ToString();
+}
+
+/// <summary>Чип тега на карточке — раздел 8. Цвет посчитан заранее: в разметке его считать нечем.</summary>
+public sealed class TagChip(string name, Brush background, Brush foreground)
+{
+    public string Name { get; } = name;
+
+    public string Label { get; } = TagFormat.Marker + name;
+
+    public Brush Background { get; } = background;
+
+    public Brush Foreground { get; } = foreground;
+}
+
 /// <summary>Сторона карточки, у которой рисуется полоска места вставки при перетаскивании.</summary>
 public enum DropSide
 {
@@ -601,7 +760,10 @@ public enum DropSide
 
 public sealed partial class TaskCardViewModel : ObservableObject
 {
-    public TaskCardViewModel(TaskItem item)
+    /// <summary>Откуда берётся цвет чипа. Подставляется списком: он знает и настройки, и тему.</summary>
+    private readonly Func<string, TagChip> _chip;
+
+    public TaskCardViewModel(TaskItem item, Func<string, TagChip>? chip = null)
     {
         Item = item;
         SortOrder = item.SortOrder;
@@ -609,9 +771,13 @@ public sealed partial class TaskCardViewModel : ObservableObject
         _notes = item.Notes;
         _isFlagged = item.IsFlagged;
         _isExpanded = item.IsExpanded;
+        _chip = chip ?? DefaultChip;
 
         foreach (var parsed in SubtaskFormat.Parse(item.Subtasks)) Subtasks.Add(Attach(new SubtaskViewModel(parsed)));
+        foreach (var tag in TagFormat.Parse(item.Tags)) Tags.Add(_chip(tag));
     }
+
+    private static TagChip DefaultChip(string tag) => new(tag, Brushes.Transparent, Brushes.Gray);
 
     public TaskItem Item { get; }
 
@@ -685,9 +851,10 @@ public sealed partial class TaskCardViewModel : ObservableObject
     [ObservableProperty]
     private string _editTitle = "";
 
+    /// <summary>Правится строка целиком, вместе с тегами: отдельного редактора тегов нет — раздел 8.</summary>
     public void BeginEdit()
     {
-        EditTitle = Title;
+        EditTitle = TagFormat.Compose(Title, TagNames);
         IsEditing = true;
     }
 
@@ -695,14 +862,54 @@ public sealed partial class TaskCardViewModel : ObservableObject
     public void CommitEdit()
     {
         IsEditing = false;
-        var edited = EditTitle.Trim();
-        if (edited.Length > 0 && edited != Title) Title = edited;
+
+        var (edited, tags) = TagFormat.Split(EditTitle.Trim());
+        if (edited.Length == 0) return; // одни теги задачей не являются
+
+        SetTags(tags);
+        if (edited != Title) Title = edited;
     }
 
     /// <summary>Esc — откатить изменение заголовка — раздел 10.</summary>
     public void CancelEdit() => IsEditing = false;
 
     public bool HasNotes => !string.IsNullOrWhiteSpace(Notes);
+
+    // --- теги, раздел 8 ---
+
+    public ObservableCollection<TagChip> Tags { get; } = [];
+
+    public bool HasTags => Tags.Count > 0;
+
+    public IReadOnlyList<string> TagNames => Tags.Select(chip => chip.Name).ToList();
+
+    /// <summary>То, что уходит в базу; на него подписана запись — как у чеклиста.</summary>
+    public string? TagsText => TagFormat.Format(TagNames);
+
+    /// <summary>
+    /// Заменить набор тегов целиком. Отдельного редактора у них нет: теги приходят из строки
+    /// заголовка при правке и из окна тегов при удалении.
+    /// </summary>
+    public void SetTags(IEnumerable<string> names)
+    {
+        var wanted = names.Select(TagFormat.Normalize).Where(tag => tag is not null).Distinct().ToList();
+        if (wanted.SequenceEqual(TagNames)) return;
+
+        Tags.Clear();
+        foreach (var tag in wanted) Tags.Add(_chip(tag!));
+
+        OnPropertyChanged(nameof(HasTags));
+        OnPropertyChanged(nameof(TagNames));
+        OnPropertyChanged(nameof(TagsText)); // последним: на него подписана запись в базу
+    }
+
+    /// <summary>Пересобрать чипы, не трогая состав: цвет мог поменяться в окне тегов или вслед за темой.</summary>
+    public void RefreshTagColors()
+    {
+        var names = TagNames;
+        Tags.Clear();
+        foreach (var tag in names) Tags.Add(_chip(tag));
+    }
 
     // --- чеклист, раздел 8 ---
 

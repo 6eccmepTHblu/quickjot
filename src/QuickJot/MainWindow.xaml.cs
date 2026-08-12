@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using QuickJot.Data;
 using QuickJot.ViewModels;
 
 namespace QuickJot;
@@ -182,10 +183,39 @@ public partial class MainWindow : Window
 
     private void HandleTitleKeys(KeyEventArgs e)
     {
+        // Пока открыта подсказка тегов, стрелки и Tab принадлежат ей, а не списку и не заметке.
+        if (_viewModel.IsSuggesting)
+        {
+            switch (e.Key)
+            {
+                case Key.Up:
+                    e.Handled = true;
+                    _viewModel.MoveSuggestion(-1);
+                    return;
+
+                case Key.Down:
+                    e.Handled = true;
+                    _viewModel.MoveSuggestion(1);
+                    return;
+
+                case Key.Tab:
+                    e.Handled = true;
+                    ApplySuggestion();
+                    return;
+
+                case Key.Escape:
+                    e.Handled = true;
+                    _viewModel.CloseSuggestions();
+                    return;
+            }
+        }
+
         switch (e.Key)
         {
             case Key.Enter:
                 e.Handled = true;
+                // Enter создаёт задачу даже с открытой подсказкой: тег мог быть дописан руками.
+                _viewModel.CloseSuggestions();
                 if (_viewModel.Create() && Ctrl) HideRequested?.Invoke();
                 break;
 
@@ -347,6 +377,40 @@ public partial class MainWindow : Window
                 FocusCardNote(card);
                 break;
         }
+    }
+
+    // --- теги, разделы 7 и 8 ---
+
+    /// <summary>Каретка сдвинулась или текст изменился — пересчитать подсказку тегов.</summary>
+    private void OnInputSelectionChanged(object sender, RoutedEventArgs e) =>
+        _viewModel.UpdateSuggestions(Input.Text, Input.CaretIndex);
+
+    private void ApplySuggestion(TagSuggestion? chosen = null)
+    {
+        var (text, caret) = _viewModel.ApplySuggestion(Input.Text, Input.CaretIndex, chosen);
+
+        Input.Text = text; // привязка сама донесёт до черновика
+        Input.CaretIndex = caret;
+        Input.Focus();
+    }
+
+    private void OnSuggestionClicked(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not TagSuggestion suggestion) return;
+
+        ApplySuggestion(suggestion);
+        e.Handled = true;
+    }
+
+    /// <summary>Клик по чипу отбирает задачи с этим тегом — раздел 8.</summary>
+    private void OnTagClicked(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not TagChip chip) return;
+
+        _viewModel.Draft = TagFormat.Marker + chip.Name + " ";
+        Input.Focus();
+        Input.CaretIndex = Input.Text.Length;
+        e.Handled = true;
     }
 
     // --- чеклист карточки, раздел 8 ---

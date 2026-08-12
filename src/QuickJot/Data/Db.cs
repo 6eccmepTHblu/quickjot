@@ -24,6 +24,7 @@ public static class Db
           is_flagged   INTEGER NOT NULL DEFAULT 0,
           is_expanded  INTEGER NOT NULL DEFAULT 0,
           subtasks     TEXT,
+          tags         TEXT,
           sort_order   REAL NOT NULL,
           completed_at TEXT,
           deleted_at   TEXT,
@@ -82,6 +83,7 @@ public static class Db
     {
         var columns = db.Query<string>("SELECT name FROM pragma_table_info('tasks')").AsList();
         if (!columns.Contains("subtasks")) db.Execute("ALTER TABLE tasks ADD COLUMN subtasks TEXT");
+        if (!columns.Contains("tags")) db.Execute("ALTER TABLE tasks ADD COLUMN tags TEXT");
     }
 
     /// <summary>Куда класть бэкапы: рядом с той базой, которая открыта, а не всегда в рабочую папку.</summary>
