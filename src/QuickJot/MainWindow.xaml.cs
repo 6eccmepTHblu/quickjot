@@ -242,6 +242,7 @@ public partial class MainWindow : Window
         {
             case Key.Escape:
                 e.Handled = true;
+                if (card is not null) ForgetEmptyRequests(card);
                 Input.Focus(); // повторный Esc уже из поля спрячет окно — раздел 10
                 break;
 
@@ -304,6 +305,8 @@ public partial class MainWindow : Window
             case Key.Right when card is not null:
                 e.Handled = true;
                 card.IsExpanded = true;
+                // Разворачивать нечего — значит, просят место под заметку.
+                if (!card.HasNotes && !card.HasSubtasks) card.IsNoteRequested = true;
                 break;
 
             case Key.Left when card is not null:
@@ -518,7 +521,33 @@ public partial class MainWindow : Window
 
     private void OnSubtaskInputLostFocus(object sender, RoutedEventArgs e)
     {
-        if (sender is TextBox { DataContext: TaskCardViewModel card } input) AddSubtask(input, card);
+        if (sender is not TextBox { DataContext: TaskCardViewModel card } input) return;
+
+        AddSubtask(input, card);
+        if (!card.HasSubtasks) card.IsSubtaskRequested = false; // ушли, ничего не добавив — строка снова не нужна
+    }
+
+    /// <summary>Ушли с карточки, ничего не написав, — открытые по запросу пустые поля прячутся.</summary>
+    private void OnListSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        foreach (var card in e.RemovedItems.OfType<TaskCardViewModel>()) ForgetEmptyRequests(card);
+    }
+
+    private static void ForgetEmptyRequests(TaskCardViewModel card)
+    {
+        if (!card.HasNotes) card.IsNoteRequested = false;
+        if (!card.HasSubtasks) card.IsSubtaskRequested = false;
+    }
+
+    /// <summary>Ушли из пустого поля заметки — оно прячется: пустая коробка в карточке ни о чём.</summary>
+    private void OnCardNoteLostFocus(object sender, RoutedEventArgs e)
+    {
+        // Текст берётся у поля, а не у карточки: привязка обновляет её тоже по уходу фокуса,
+        // и порядок этих двух событий не определён.
+        if (sender is TextBox { DataContext: TaskCardViewModel card } editor && editor.Text.Trim().Length == 0)
+        {
+            card.IsNoteRequested = false;
+        }
     }
 
     /// <summary>Вставка списка: каждая строка становится отдельным пунктом.</summary>
@@ -584,6 +613,7 @@ public partial class MainWindow : Window
     private void FocusSubtaskInput(TaskCardViewModel card)
     {
         card.IsExpanded = true;
+        card.IsSubtaskRequested = true; // пришли сюда сами — строку добавления показать
 
         // Следующим проходом: поле могло стать видимым только что и ещё не в дереве.
         Dispatcher.BeginInvoke(() =>
@@ -661,6 +691,7 @@ public partial class MainWindow : Window
         var list = List.Items.Contains(card) ? List : CompletedList;
         list.SelectedIndex = list.Items.IndexOf(card);
         card.IsExpanded = true;
+        card.IsNoteRequested = true; // пришли сюда сами — поле показать, даже если заметки ещё нет
 
         // Следующим проходом: поле могло стать видимым только что и ещё не в дереве.
         Dispatcher.BeginInvoke(() =>

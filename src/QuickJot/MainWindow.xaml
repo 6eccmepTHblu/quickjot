@@ -345,6 +345,7 @@
                      ItemsSource="{Binding Tasks}"
                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
                      AllowDrop="True"
+                     SelectionChanged="OnListSelectionChanged"
                      PreviewMouseLeftButtonDown="OnListMouseDown"
                      PreviewMouseMove="OnListMouseMove"
                      DragOver="OnListDragOver"
@@ -499,7 +500,8 @@
                                              Margin="0,6,0,0"
                                              MinHeight="44"
                                              MaxHeight="140"
-                                             Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}"
+                                             Visibility="{Binding ShowNote, Converter={StaticResource BoolToVisibility}}"
+                                             LostKeyboardFocus="OnCardNoteLostFocus"
                                              Text="{Binding Notes, UpdateSourceTrigger=LostFocus}" />
 
                                     <!--
@@ -511,7 +513,7 @@
                                     <!-- Отступ слева: чеклист подчинён заголовку, а не стоит с ним вровень. -->
                                     <StackPanel Grid.Row="3"
                                                 Margin="10,6,0,0"
-                                                Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
+                                                Visibility="{Binding ShowChecklist, Converter={StaticResource BoolToVisibility}}">
                                         <ListBox x:Name="SubtaskList"
                                                  ItemsSource="{Binding Subtasks}"
                                                  ItemTemplate="{StaticResource SubtaskTemplate}"
@@ -647,6 +649,7 @@
                 <!-- Тот же шаблон карточки, что и у активного списка: держать вторую копию незачем. -->
                 <ListBox x:Name="CompletedList"
                          ItemsSource="{Binding CompletedToday}"
+                         SelectionChanged="OnListSelectionChanged"
                          ItemTemplate="{Binding ItemTemplate, ElementName=List}"
                          Background="Transparent"
                          BorderThickness="0"

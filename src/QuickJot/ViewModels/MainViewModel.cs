@@ -641,6 +641,7 @@ public sealed partial class TaskCardViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasNotes))]
     [NotifyPropertyChangedFor(nameof(HasSecondTier))]
+    [NotifyPropertyChangedFor(nameof(ShowNote))]
     private string? _notes;
 
     [ObservableProperty]
@@ -648,7 +649,35 @@ public sealed partial class TaskCardViewModel : ObservableObject
 
     /// <summary>Развёрнутая заметка и чеклист в карточке — раздел 8.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNote))]
+    [NotifyPropertyChangedFor(nameof(ShowChecklist))]
     private bool _isExpanded;
+
+    /// <summary>
+    /// Пустое поле заметки показывается только по явному запросу — `→` или `Tab`. Иначе у задачи,
+    /// где есть один чеклист, висела бы пустая коробка описания, которую никто не просил.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNote))]
+    private bool _isNoteRequested;
+
+    /// <summary>То же для строки «+ подзадача»: у задачи с одной заметкой её быть не должно.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowChecklist))]
+    private bool _isSubtaskRequested;
+
+    public bool ShowNote => IsExpanded && (HasNotes || IsNoteRequested);
+
+    public bool ShowChecklist => IsExpanded && (HasSubtasks || IsSubtaskRequested);
+
+    /// <summary>Свёрнутая карточка забывает запросы: следующий разворот начинается с чистого листа.</summary>
+    partial void OnIsExpandedChanged(bool value)
+    {
+        if (value) return;
+
+        IsNoteRequested = false;
+        IsSubtaskRequested = false;
+    }
 
     [ObservableProperty]
     private bool _isCompleted;
@@ -790,6 +819,7 @@ public sealed partial class TaskCardViewModel : ObservableObject
         SubtaskChange = description;
         OnPropertyChanged(nameof(HasSubtasks));
         OnPropertyChanged(nameof(HasSecondTier));
+        OnPropertyChanged(nameof(ShowChecklist));
         OnPropertyChanged(nameof(SubtaskCounter));
         OnPropertyChanged(nameof(AllSubtasksDone));
         OnPropertyChanged(nameof(SubtasksText)); // последним: на него подписана запись в базу

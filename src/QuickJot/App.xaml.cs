@@ -136,6 +136,11 @@ public partial class App : Application
             "[ ] примеры заполнения",
             "[ ] выложить в общий доступ"));
         Tasks.SetExpanded(big.Id, true);
+
+        // Чеклист без описания: у такой задачи не должно висеть пустое поле заметки.
+        var bare = Tasks.Create("чеклист без описания");
+        Tasks.SetSubtasks(bare.Id, "[x] получить спецификацию\n[ ] разложить на пункты");
+        Tasks.SetExpanded(bare.Id, true);
     }
 
     /// <summary>
