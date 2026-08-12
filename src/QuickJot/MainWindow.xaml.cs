@@ -182,6 +182,15 @@ public partial class MainWindow : Window
     /// </summary>
     private static Key Pressed(KeyEventArgs e) => e.Key == Key.System ? e.SystemKey : e.Key;
 
+    /// <summary>
+    /// Зажатая клавиша не должна превращаться в череду операций: удержанный пробел выполнял задачу
+    /// два десятка раз подряд и забивал стек отмены. Автоповтор гасится у действий — выполнить,
+    /// удалить, начать правку, переключить важность. Навигация и Alt+↑↓ повтору не мешают:
+    /// там он как раз полезен.
+    /// </summary>
+    private static bool RepeatedAction(KeyEventArgs e) =>
+        e.IsRepeat && Pressed(e) is Key.Space or Key.Enter or Key.Delete or Key.I or Key.D1;
+
     private static bool Ctrl => (Keyboard.Modifiers & ModifierKeys.Control) != 0;
     private static bool Shift => (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
     private static bool Alt => (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
@@ -270,6 +279,12 @@ public partial class MainWindow : Window
     /// <summary>Работает и для активного списка, и для блока «Выполнено сегодня» — раздел 9.</summary>
     private void HandleListKeys(KeyEventArgs e, ListBox list)
     {
+        if (RepeatedAction(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         var card = list.SelectedItem as TaskCardViewModel;
         int index = list.SelectedIndex;
 
@@ -450,6 +465,12 @@ public partial class MainWindow : Window
     private void HandleSubtaskKeys(KeyEventArgs e, ListBox list)
     {
         if (list.DataContext is not TaskCardViewModel card) return;
+
+        if (RepeatedAction(e))
+        {
+            e.Handled = true;
+            return;
+        }
 
         if (card.Subtasks.FirstOrDefault(item => item.IsEditing) is { } editing)
         {
