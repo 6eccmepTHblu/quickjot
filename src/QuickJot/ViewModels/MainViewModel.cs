@@ -345,8 +345,26 @@ public sealed partial class MainViewModel : ObservableObject
         Tasks.Insert(index, card);
     }
 
-    private bool Matches(object item) => item is TaskCardViewModel card
-        && (Filter.Length == 0 || card.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// Ищем и по заголовку, и по чеклисту: в большой задаче нужное чаще всего именно в пунктах.
+    /// Заодно помечаем карточку, которую вытащил именно чеклист, — иначе непонятно, за что она всплыла.
+    /// </summary>
+    private bool Matches(object item)
+    {
+        if (item is not TaskCardViewModel card) return false;
+
+        if (Filter.Length == 0)
+        {
+            card.IsSubtaskMatch = false;
+            return true;
+        }
+
+        bool inTitle = card.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase);
+        bool inSubtasks = card.Subtasks.Any(s => s.Title.Contains(Filter, StringComparison.OrdinalIgnoreCase));
+
+        card.IsSubtaskMatch = inSubtasks && !inTitle;
+        return inTitle || inSubtasks;
+    }
 
     partial void OnDraftChanged(string value)
     {
@@ -556,6 +574,19 @@ public sealed partial class MainViewModel : ObservableObject
                 Record("Заметка изменена", () => card.Notes = previous, () => card.Notes = current);
                 break;
             }
+
+            // Чеклист пишется целиком: отмена возвращает прежнюю строку, а не отдельный пункт.
+            case nameof(TaskCardViewModel.SubtasksText):
+            {
+                var previous = card.Item.Subtasks;
+                var current = card.SubtasksText;
+                if (previous == current) break;
+
+                _tasks.SetSubtasks(card.Id, current);
+                card.Item.Subtasks = current;
+                Record(card.SubtaskChange, () => card.LoadSubtasks(previous), () => card.LoadSubtasks(current));
+                break;
+            }
         }
     }
 }
@@ -568,28 +599,40 @@ public enum DropSide
     Below,
 }
 
-public sealed partial class TaskCardViewModel(TaskItem item) : ObservableObject
+public sealed partial class TaskCardViewModel : ObservableObject
 {
-    public TaskItem Item { get; } = item;
+    public TaskCardViewModel(TaskItem item)
+    {
+        Item = item;
+        SortOrder = item.SortOrder;
+        _title = item.Title;
+        _notes = item.Notes;
+        _isFlagged = item.IsFlagged;
+        _isExpanded = item.IsExpanded;
+
+        foreach (var parsed in SubtaskFormat.Parse(item.Subtasks)) Subtasks.Add(Attach(new SubtaskViewModel(parsed)));
+    }
+
+    public TaskItem Item { get; }
 
     public string Id => Item.Id;
 
     /// <summary>Держится в памяти: по нему задача возвращается на прежнее место из выполненных.</summary>
-    public double SortOrder { get; set; } = item.SortOrder;
+    public double SortOrder { get; set; }
 
     [ObservableProperty]
-    private string _title = item.Title;
+    private string _title;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasNotes))]
-    private string? _notes = item.Notes;
+    private string? _notes;
 
     [ObservableProperty]
-    private bool _isFlagged = item.IsFlagged;
+    private bool _isFlagged;
 
-    /// <summary>Развёрнутая заметка в карточке — раздел 8.</summary>
+    /// <summary>Развёрнутая заметка и чеклист в карточке — раздел 8.</summary>
     [ObservableProperty]
-    private bool _isExpanded = item.IsExpanded;
+    private bool _isExpanded;
 
     [ObservableProperty]
     private bool _isCompleted;
@@ -633,6 +676,102 @@ public sealed partial class TaskCardViewModel(TaskItem item) : ObservableObject
     /// <summary>Облачко видно всегда, активный цвет — когда заметка есть.</summary>
     public bool HasNotes => !string.IsNullOrWhiteSpace(Notes);
 
+    // --- чеклист, раздел 8 ---
+
+    /// <summary>Ведущая коллекция; строка для базы собирается из неё, а не наоборот.</summary>
+    public ObservableCollection<SubtaskViewModel> Subtasks { get; } = [];
+
+    /// <summary>То, что уходит в базу. На него подписана запись, поэтому извещается последним.</summary>
+    public string? SubtasksText => SubtaskFormat.Format(Subtasks.Select(s => new Subtask(s.IsDone, s.Title)));
+
+    public bool HasSubtasks => Subtasks.Count > 0;
+
+    public string SubtaskCounter => $"{Subtasks.Count(s => s.IsDone)}/{Subtasks.Count}";
+
+    public bool AllSubtasksDone => HasSubtasks && Subtasks.All(s => s.IsDone);
+
+    /// <summary>Карточку вытащил в фильтр чеклист, а не заголовок, — счётчик подсвечивается.</summary>
+    [ObservableProperty]
+    private bool _isSubtaskMatch;
+
+    /// <summary>Чем описать последнее изменение чеклиста в стеке отмены — раздел 11.</summary>
+    public string SubtaskChange { get; private set; } = "Чеклист изменён";
+
+    public SubtaskViewModel AddSubtask(string title)
+    {
+        var subtask = Attach(new SubtaskViewModel(new Subtask(false, title.Trim())));
+        Subtasks.Add(subtask);
+        NotifySubtasks("Подзадача добавлена");
+        return subtask;
+    }
+
+    public void RemoveSubtask(SubtaskViewModel subtask)
+    {
+        Detach(subtask);
+        if (Subtasks.Remove(subtask)) NotifySubtasks("Подзадача удалена");
+    }
+
+    /// <summary>Alt+↑↓ внутри чеклиста — раздел 10. Порядок тут позиционный, sort_order не нужен.</summary>
+    public void MoveSubtask(SubtaskViewModel subtask, int delta)
+    {
+        int index = Subtasks.IndexOf(subtask);
+        int target = index + delta;
+        if (index < 0 || target < 0 || target >= Subtasks.Count) return;
+
+        Subtasks.Move(index, target);
+        NotifySubtasks("Подзадача переставлена");
+    }
+
+    /// <summary>Пересобрать чеклист из строки: сюда приходит отмена — раздел 11.</summary>
+    public void LoadSubtasks(string? stored)
+    {
+        foreach (var old in Subtasks) Detach(old);
+        Subtasks.Clear();
+
+        foreach (var parsed in SubtaskFormat.Parse(stored)) Subtasks.Add(Attach(new SubtaskViewModel(parsed)));
+        NotifySubtasks("Чеклист изменён");
+    }
+
+    private SubtaskViewModel Attach(SubtaskViewModel subtask)
+    {
+        subtask.PropertyChanged += OnSubtaskChanged;
+        subtask.DeleteRequested += RemoveSubtask;
+        return subtask;
+    }
+
+    private void Detach(SubtaskViewModel subtask)
+    {
+        subtask.PropertyChanged -= OnSubtaskChanged;
+        subtask.DeleteRequested -= RemoveSubtask;
+    }
+
+    private void OnSubtaskChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(SubtaskViewModel.IsDone) when sender is SubtaskViewModel { IsDone: true }:
+                NotifySubtasks("Подзадача выполнена");
+                break;
+
+            case nameof(SubtaskViewModel.IsDone):
+                NotifySubtasks("Подзадача возвращена");
+                break;
+
+            case nameof(SubtaskViewModel.Title):
+                NotifySubtasks("Подзадача изменена");
+                break;
+        }
+    }
+
+    private void NotifySubtasks(string description)
+    {
+        SubtaskChange = description;
+        OnPropertyChanged(nameof(HasSubtasks));
+        OnPropertyChanged(nameof(SubtaskCounter));
+        OnPropertyChanged(nameof(AllSubtasksDone));
+        OnPropertyChanged(nameof(SubtasksText)); // последним: на него подписана запись в базу
+    }
+
     /// <summary>Удаляет не карточка — список. Она только просит.</summary>
     public event Action<TaskCardViewModel>? DeleteRequested;
 
@@ -642,6 +781,50 @@ public sealed partial class TaskCardViewModel(TaskItem item) : ObservableObject
     /// <summary>Клик по облачку: заметка есть — развернуть, нет — открыть пустое поле — раздел 8.</summary>
     [RelayCommand]
     private void ToggleNote() => IsExpanded = !IsExpanded;
+
+    [RelayCommand]
+    private void Delete() => DeleteRequested?.Invoke(this);
+}
+
+/// <summary>
+/// Пункт чеклиста. Ведёт себя как маленькая карточка и слушает те же клавиши (раздел 10):
+/// Space — выполнить, Enter — править, Delete — удалить, Alt+↑↓ — переставить.
+/// </summary>
+public sealed partial class SubtaskViewModel(Subtask subtask) : ObservableObject
+{
+    [ObservableProperty]
+    private bool _isDone = subtask.Done;
+
+    [ObservableProperty]
+    private string _title = subtask.Title;
+
+    [ObservableProperty]
+    private bool _isEditing;
+
+    /// <summary>Буфер правки: как у заголовка задачи, чтобы Esc было чем откатить.</summary>
+    [ObservableProperty]
+    private string _editTitle = "";
+
+    public void BeginEdit()
+    {
+        EditTitle = Title;
+        IsEditing = true;
+    }
+
+    public void CommitEdit()
+    {
+        IsEditing = false;
+        var edited = EditTitle.Trim();
+        if (edited.Length > 0 && edited != Title) Title = edited;
+    }
+
+    public void CancelEdit() => IsEditing = false;
+
+    /// <summary>Удаляет не пункт — карточка. Он только просит.</summary>
+    public event Action<SubtaskViewModel>? DeleteRequested;
+
+    [RelayCommand]
+    private void Toggle() => IsDone = !IsDone;
 
     [RelayCommand]
     private void Delete() => DeleteRequested?.Invoke(this);

@@ -14,8 +14,15 @@ namespace QuickJot;
 
 public partial class App : Application
 {
-    private const string MutexName = @"Local\QuickJot.SingleInstance";
-    private const string ShowEventName = @"Local\QuickJot.ShowWindow";
+    /// <summary>
+    /// Прогон на dev-базе получает свои имена: иначе он упирается в единственный экземпляр
+    /// и вместо себя показывает рабочее приложение — вплоть до чужого окна поверх чужих данных.
+    /// </summary>
+    private static readonly string Suffix =
+        Environment.GetEnvironmentVariable("QUICKJOT_DEV") is null ? "" : ".dev";
+
+    private static readonly string MutexName = $@"Local\QuickJot.SingleInstance{Suffix}";
+    private static readonly string ShowEventName = $@"Local\QuickJot.ShowWindow{Suffix}";
 
     private Mutex? _instanceLock;
     private SettingsWindow? _settingsWindow;
@@ -75,7 +82,7 @@ public partial class App : Application
         ApplyTheme();
         WarmUpWindow();
         CreateTray();
-        RegisterHotkey();
+        if (devDatabase is null) RegisterHotkey(); // хоткей занят рабочим экземпляром — прогон за него не дерётся
         ListenForSecondInstance();
 
         Log.Write("старт: окно прогрето, приложение в трее");
@@ -113,6 +120,15 @@ public partial class App : Application
         var flagged = Tasks.Create("важная задача с очень длинным заголовком, который обязан упереться " +
                                    "в лимит строк и закончиться многоточием, чтобы было видно, как это выглядит");
         Tasks.SetFlagged(flagged.Id, true);
+
+        var big = Tasks.Create("задача с чеклистом", "описание задачи целиком");
+        Tasks.SetSubtasks(big.Id, string.Join('\n',
+            "[x] собрать список полей",
+            "[x] согласовать с Димой",
+            "[ ] описать поле «Радар»",
+            "[ ] примеры заполнения",
+            "[ ] выложить в общий доступ"));
+        Tasks.SetExpanded(big.Id, true);
     }
 
     /// <summary>

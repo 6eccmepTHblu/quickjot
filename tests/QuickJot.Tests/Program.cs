@@ -35,6 +35,8 @@ internal static class Program
         Run("настройки применяются на лету", SettingsReload);
         Run("перетаскивание порядка мышью", DragReorder);
         Run("задачи лежат в самой базе, а не только в -wal", DataLandsInTheDatabaseFile);
+        Run("чеклист: формат хранения", SubtaskFormatRoundTrip);
+        Run("чеклист: правка, порядок, отмена, фильтр", Checklist);
 
         Console.WriteLine(_failures == 0 ? "\nвсе проверки прошли" : $"\nпровалено: {_failures}");
         return _failures == 0 ? 0 : 1;
@@ -617,6 +619,84 @@ internal static class Program
         {
             SqliteConnectionCleanup(path);
         }
+    }
+
+    /// <summary>
+    /// Формат чеклиста — раздел 8. Строка без метки тоже читается как пункт: базу могли править руками,
+    /// и молча терять такие строки нельзя.
+    /// </summary>
+    private static void SubtaskFormatRoundTrip()
+    {
+        var parsed = SubtaskFormat.Parse("[x] сделано\n[ ] не сделано\n\n  голая строка  \n");
+        Check(parsed.Count == 3, $"разобрано пунктов: {parsed.Count}, ожидалось 3");
+        Check(parsed[0] is { Done: true, Title: "сделано" }, "выполненный пункт разобран не так");
+        Check(parsed[1] is { Done: false, Title: "не сделано" }, "невыполненный пункт разобран не так");
+        Check(parsed[2] is { Done: false, Title: "голая строка" }, "строка без метки потерялась");
+
+        Check(SubtaskFormat.Format(parsed) == "[x] сделано\n[ ] не сделано\n[ ] голая строка",
+            "обратная сборка дала не тот текст");
+
+        Check(SubtaskFormat.Format([]) is null, "пустой чеклист должен быть NULL, а не пустой строкой");
+        Check(SubtaskFormat.Format([new Subtask(false, "   ")]) is null, "пункт из пробелов должен отбрасываться");
+        Check(SubtaskFormat.Parse(null).Count == 0, "NULL должен читаться как пустой чеклист");
+    }
+
+    /// <summary>
+    /// Чеклист целиком: добавление, выполнение, порядок, запись в базу, отмена и поиск по пунктам.
+    /// </summary>
+    private static void Checklist(TaskRepository repo)
+    {
+        var vm = new MainViewModel(repo);
+        vm.Draft = "большая задача";
+        vm.Create();
+
+        var card = vm.Tasks[0];
+        card.AddSubtask("собрать список полей");
+        card.AddSubtask("согласовать с Димой");
+        card.AddSubtask("выложить");
+
+        Check(card.SubtaskCounter == "0/3", $"счётчик показывает «{card.SubtaskCounter}»");
+        Check(repo.Find(card.Id)!.Subtasks == "[ ] собрать список полей\n[ ] согласовать с Димой\n[ ] выложить",
+            "чеклист не записался в базу");
+
+        card.Subtasks[0].ToggleCommand.Execute(null);
+        Check(card.SubtaskCounter == "1/3", "выполнение пункта не дошло до счётчика");
+        Check(!card.AllSubtasksDone, "задача не может считаться закрытой с одним выполненным пунктом");
+
+        // Пункты переставляются позиционно: sort_order тут не нужен.
+        card.MoveSubtask(card.Subtasks[2], -1);
+        Check(card.Subtasks.Select(s => s.Title).SequenceEqual(["собрать список полей", "выложить", "согласовать с Димой"]),
+            "Alt+↑ переставил пункт не так");
+
+        // Отмена возвращает прежний чеклист целиком — раздел 11.
+        vm.UndoCommand.Execute(null);
+        Check(card.Subtasks.Select(s => s.Title).SequenceEqual(["собрать список полей", "согласовать с Димой", "выложить"]),
+            "отмена не вернула прежний порядок");
+        Check(repo.Find(card.Id)!.Subtasks!.Contains("[x] собрать"), "отмена перестановки сбросила выполнение");
+
+        card.Subtasks[1].DeleteCommand.Execute(null);
+        Check(card.SubtaskCounter == "1/2", "удаление пункта не дошло до счётчика");
+
+        vm.UndoCommand.Execute(null);
+        Check(card.SubtaskCounter == "1/3", "отмена не вернула удалённый пункт");
+
+        // Задача при полностью закрытом чеклисте сама не выполняется — только счётчик меняет вид.
+        foreach (var subtask in card.Subtasks) subtask.IsDone = true;
+        Check(card.AllSubtasksDone, "все пункты выполнены, а признак не выставился");
+        Check(!card.IsCompleted, "чеклист не должен закрывать саму задачу");
+
+        // Поиск идёт и по пунктам: в большой задаче нужное чаще всего именно там.
+        vm.Draft = "Димой";
+        Check(vm.VisibleTasks.Contains(card), "фильтр не нашёл задачу по тексту пункта");
+        Check(card.IsSubtaskMatch, "счётчик не помечен, хотя карточку вытащил именно чеклист");
+
+        vm.Draft = "большая";
+        Check(!card.IsSubtaskMatch, "совпадение по заголовку не должно помечать счётчик");
+
+        vm.Draft = "";
+        var reopened = new MainViewModel(repo);
+        reopened.Load();
+        Check(reopened.Tasks[0].SubtaskCounter == "3/3", "чеклист не пережил перезапуск");
     }
 
     /// <summary>

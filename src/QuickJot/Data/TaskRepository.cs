@@ -8,6 +8,10 @@ public sealed class TaskItem
     public string Id { get; set; } = "";
     public string Title { get; set; } = "";
     public string? Notes { get; set; }
+
+    /// <summary>Чеклист строками «[x] текст» — формат в <see cref="SubtaskFormat"/>.</summary>
+    public string? Subtasks { get; set; }
+
     public bool IsFlagged { get; set; }
     public bool IsExpanded { get; set; }
     public double SortOrder { get; set; }
@@ -29,7 +33,7 @@ public sealed class TaskRepository(SqliteConnection db)
     public int RenumberCount { get; private set; }
 
     private const string Columns =
-        "id, title, notes, is_flagged, is_expanded, sort_order, completed_at, deleted_at, created_at, updated_at";
+        "id, title, notes, subtasks, is_flagged, is_expanded, sort_order, completed_at, deleted_at, created_at, updated_at";
 
     public IReadOnlyList<TaskItem> Active() => db.Query<TaskItem>(
         $"SELECT {Columns} FROM tasks WHERE deleted_at IS NULL AND completed_at IS NULL ORDER BY sort_order").AsList();
@@ -68,6 +72,7 @@ public sealed class TaskRepository(SqliteConnection db)
 
     public void SetTitle(string id, string title) => Set("title", id, title);
     public void SetNotes(string id, string? notes) => Set("notes", id, notes);
+    public void SetSubtasks(string id, string? subtasks) => Set("subtasks", id, subtasks);
     public void SetFlagged(string id, bool flagged) => Set("is_flagged", id, flagged);
     public void SetExpanded(string id, bool expanded) => Set("is_expanded", id, expanded);
 

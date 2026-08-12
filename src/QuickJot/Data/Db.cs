@@ -23,6 +23,7 @@ public static class Db
           notes        TEXT,
           is_flagged   INTEGER NOT NULL DEFAULT 0,
           is_expanded  INTEGER NOT NULL DEFAULT 0,
+          subtasks     TEXT,
           sort_order   REAL NOT NULL,
           completed_at TEXT,
           deleted_at   TEXT,
@@ -69,7 +70,18 @@ public static class Db
         db.Execute("PRAGMA wal_checkpoint(TRUNCATE);"); // и сразу подобрать всё, что накопилось раньше
 
         db.Execute(Schema);
+        Migrate(db);
         return db;
+    }
+
+    /// <summary>
+    /// Схема выше создаёт только новые базы. У уже живущей колонку приходится досыпать,
+    /// а IF NOT EXISTS у ADD COLUMN в SQLite нет — отсюда проверка по table_info.
+    /// </summary>
+    private static void Migrate(SqliteConnection db)
+    {
+        var columns = db.Query<string>("SELECT name FROM pragma_table_info('tasks')").AsList();
+        if (!columns.Contains("subtasks")) db.Execute("ALTER TABLE tasks ADD COLUMN subtasks TEXT");
     }
 
     /// <summary>Куда класть бэкапы: рядом с той базой, которая открыта, а не всегда в рабочую папку.</summary>

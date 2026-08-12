@@ -156,6 +156,111 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Крестик появляется только на строке под курсором. Прозрачность задаётся стилем,
+             а не на кнопке: локальное значение перебило бы триггеры (см. CardGlyph). -->
+        <Style x:Key="SubtaskDeleteButton" TargetType="Button" BasedOn="{StaticResource CardIconButton}">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Padding" Value="6,0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Opacity" Value="0.55" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Opacity" Value="0.55" />
+                </DataTrigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="1" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Строка чеклиста: своя подложка под выделение, у карточек она рисуется самой карточкой. -->
+        <!-- Без BasedOn на неявный стиль: он объявлен ниже, а StaticResource смотрит только назад. -->
+        <Style x:Key="SubtaskRow" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="2,1" />
+            <Setter Property="Focusable" Value="True" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Row" Background="Transparent" CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Пункт чеклиста — раздел 8. Чекбокс, текст, крестик по наведению. -->
+        <DataTemplate x:Key="SubtaskTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding IsDone}"
+                          VerticalAlignment="Center"
+                          Margin="0,0,8,0"
+                          RenderTransformOrigin="0.5,0.5">
+                    <CheckBox.RenderTransform>
+                        <!-- Чекбокс пункта мельче задачного: у чеклиста подчинённый вес — раздел 8. -->
+                        <ScaleTransform ScaleX="0.8" ScaleY="0.8" />
+                    </CheckBox.RenderTransform>
+                </CheckBox>
+
+                <TextBlock Grid.Column="1"
+                           x:Name="SubtaskText"
+                           Text="{Binding Title}"
+                           ToolTip="{Binding Title}"
+                           MouseLeftButtonDown="OnSubtaskClicked"
+                           FontSize="13"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextBrush}" />
+
+                <TextBox Grid.Column="1"
+                         x:Name="SubtaskEditor"
+                         Style="{StaticResource PlainTextBox}"
+                         Padding="0"
+                         FontSize="13"
+                         MaxLength="500"
+                         Visibility="Collapsed"
+                         VerticalAlignment="Center"
+                         IsVisibleChanged="OnSubtaskEditorVisibleChanged"
+                         LostKeyboardFocus="OnSubtaskEditorLostFocus"
+                         Text="{Binding EditTitle, UpdateSourceTrigger=PropertyChanged}" />
+
+                <Button Grid.Column="2"
+                        Style="{StaticResource SubtaskDeleteButton}"
+                        Command="{Binding DeleteCommand}"
+                        ToolTip="Удалить пункт">
+                    <TextBlock Text="✕" FontSize="11" />
+                </Button>
+            </Grid>
+
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsDone}" Value="True">
+                    <Setter TargetName="SubtaskText" Property="TextDecorations" Value="Strikethrough" />
+                    <Setter TargetName="SubtaskText" Property="Opacity" Value="0.5" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                    <Setter TargetName="SubtaskText" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="SubtaskEditor" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <!-- «Отменить» в тосте: текстовая ссылка, а не кнопка с рамкой. -->
         <Style x:Key="LinkButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
@@ -297,6 +402,7 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
                                     <!-- Ярус 1: чекбокс, заголовок, важность -->
@@ -374,6 +480,16 @@
                                                   Data="{StaticResource NoteGlyph}" />
                                         </Button>
 
+                                        <!-- Счётчик чеклиста: «сделано/всего», виден только когда пункты есть. -->
+                                        <TextBlock Grid.Column="1"
+                                                   x:Name="SubtaskCounter"
+                                                   Text="{Binding SubtaskCounter}"
+                                                   Visibility="{Binding HasSubtasks, Converter={StaticResource BoolToVisibility}}"
+                                                   Foreground="{DynamicResource MutedBrush}"
+                                                   FontSize="12"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Left" />
+
                                         <Button Grid.Column="2"
                                                 x:Name="DeleteButton"
                                                 Style="{StaticResource CardIconButton}"
@@ -394,6 +510,39 @@
                                              MaxHeight="140"
                                              Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}"
                                              Text="{Binding Notes, UpdateSourceTrigger=LostFocus}" />
+
+                                    <!--
+                                        Чеклист под заметкой — раздел 8. Заметка отвечает «про что задача»,
+                                        чеклист — «что в ней осталось». Своего потолка высоты у него нет:
+                                        вложенная прокрутка резала пункт пополам и перехватывала колесо,
+                                        а окно и так прокручивается целиком.
+                                    -->
+                                    <!-- Отступ слева: чеклист подчинён заголовку, а не стоит с ним вровень. -->
+                                    <StackPanel Grid.Row="3"
+                                                Margin="10,6,0,0"
+                                                Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
+                                        <ListBox x:Name="SubtaskList"
+                                                 ItemsSource="{Binding Subtasks}"
+                                                 ItemTemplate="{StaticResource SubtaskTemplate}"
+                                                 ItemContainerStyle="{StaticResource SubtaskRow}"
+                                                 Visibility="{Binding HasSubtasks, Converter={StaticResource BoolToVisibility}}"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Padding="0"
+                                                 HorizontalContentAlignment="Stretch"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+
+                                        <!-- Строка добавления всегда последняя: набрал, Enter — и каретка осталась тут. -->
+                                        <TextBox x:Name="SubtaskInput"
+                                                 Style="{StaticResource PlainTextBox}"
+                                                 Tag="+ подзадача"
+                                                 Padding="0"
+                                                 Margin="36,3,0,1"
+                                                 FontSize="13"
+                                                 MaxLength="500"
+                                                 LostKeyboardFocus="OnSubtaskInputLostFocus"
+                                                 DataObject.Pasting="OnSubtaskPasting" />
+                                    </StackPanel>
                                 </Grid>
                             </Grid>
                         </Border>
@@ -409,6 +558,17 @@
                             <DataTrigger Binding="{Binding IsEditing}" Value="True">
                                 <Setter TargetName="TitleText" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="TitleEditor" Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+
+                            <!-- Всё сделано — счётчик перестаёт быть служебной серой цифрой. -->
+                            <DataTrigger Binding="{Binding AllSubtasksDone}" Value="True">
+                                <Setter TargetName="SubtaskCounter" Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                            </DataTrigger>
+
+                            <!-- Карточку вытащил в фильтр чеклист: показываем, за что именно. -->
+                            <DataTrigger Binding="{Binding IsSubtaskMatch}" Value="True">
+                                <Setter TargetName="SubtaskCounter" Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="SubtaskCounter" Property="FontWeight" Value="SemiBold" />
                             </DataTrigger>
 
                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
@@ -555,6 +715,12 @@
                        Text="↑↓ — навигация · Alt+↑↓ — переставить · Esc — назад в поле" />
             <TextBlock Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap" Margin="0,0,0,10"
                        Text="Space — выполнить · Enter — правка · Delete — удалить · → и ← — заметка · Ctrl+I — важность" />
+
+            <TextBlock Text="Чеклист внутри задачи" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,2" />
+            <TextBlock Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"
+                       Text="Tab — вглубь карточки: заметка, затем пункты · Shift+Tab — обратно" />
+            <TextBlock Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap" Margin="0,0,0,10"
+                       Text="Клавиши те же, что в списке: Space — выполнить · Enter — правка · Delete — удалить · Alt+↑↓ — переставить" />
 
             <TextBlock Text="Везде" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,2" />
             <TextBlock Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"

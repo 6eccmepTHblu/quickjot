@@ -154,6 +154,11 @@ public partial class MainWindow : Window
         if (EditingCard is { } editing) HandleEditKeys(e, editing);
         else if (Input.IsKeyboardFocused) HandleTitleKeys(e);
         else if (Note.IsKeyboardFocused) HandleNoteKeys(e);
+        // Поля внутри карточки разбираются до списка: иначе пробел в тексте заметки
+        // достался бы списку и выполнил задачу.
+        else if (Keyboard.FocusedElement is TextBox { Name: "SubtaskInput" } adder) HandleSubtaskInputKeys(e, adder);
+        else if (FocusedSubtaskList() is { } checklist) HandleSubtaskKeys(e, checklist);
+        else if (Keyboard.FocusedElement is TextBox { Name: "NoteEditor" } cardNote) HandleCardNoteKeys(e, cardNote);
         else if (List.IsKeyboardFocusWithin) HandleListKeys(e, List);
         else if (CompletedList.IsKeyboardFocusWithin) HandleListKeys(e, CompletedList);
         else if (e.Key == Key.Escape)
@@ -164,6 +169,12 @@ public partial class MainWindow : Window
 
         base.OnPreviewKeyDown(e);
     }
+
+    /// <summary>
+    /// Настоящая клавиша. При зажатом Alt WPF кладёт её в SystemKey, а в Key оставляет System, —
+    /// без этого Alt+↑↓ не доходит ни до перестановки задач, ни до перестановки пунктов чеклиста.
+    /// </summary>
+    private static Key Pressed(KeyEventArgs e) => e.Key == Key.System ? e.SystemKey : e.Key;
 
     private static bool Ctrl => (Keyboard.Modifiers & ModifierKeys.Control) != 0;
     private static bool Shift => (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
@@ -227,7 +238,7 @@ public partial class MainWindow : Window
         var card = list.SelectedItem as TaskCardViewModel;
         int index = list.SelectedIndex;
 
-        switch (e.Key)
+        switch (Pressed(e))
         {
             case Key.Escape:
                 e.Handled = true;
@@ -284,6 +295,12 @@ public partial class MainWindow : Window
                 FocusList(index, list);
                 break;
 
+            // Tab уводит вглубь карточки: заметка, оттуда чеклист — раздел 10.
+            case Key.Tab when !Shift && card is not null:
+                e.Handled = true;
+                FocusCardNote(card);
+                break;
+
             case Key.Right when card is not null:
                 e.Handled = true;
                 card.IsExpanded = true;
@@ -329,6 +346,274 @@ public partial class MainWindow : Window
         }
     }
 
+    // --- чеклист карточки, раздел 8 ---
+
+    /// <summary>Чеклист, внутри которого сейчас фокус, — или null, если фокус не в нём.</summary>
+    private static ListBox? FocusedSubtaskList()
+    {
+        for (var node = Keyboard.FocusedElement as DependencyObject; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is ListBox { Name: "SubtaskList" } list) return list;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Клавиши чеклиста — те же, что у списка задач (раздел 10): Space, Enter, Delete, Alt+↑↓.
+    /// Ничего своего тут заводить не нужно, это тот же список, только вложенный.
+    /// </summary>
+    private void HandleSubtaskKeys(KeyEventArgs e, ListBox list)
+    {
+        if (list.DataContext is not TaskCardViewModel card) return;
+
+        if (card.Subtasks.FirstOrDefault(item => item.IsEditing) is { } editing)
+        {
+            switch (e.Key)
+            {
+                case Key.Enter:
+                    e.Handled = true;
+                    editing.CommitEdit();
+                    FocusSubtask(list, list.Items.IndexOf(editing));
+                    break;
+
+                case Key.Escape:
+                    e.Handled = true;
+                    editing.CancelEdit();
+                    FocusSubtask(list, list.Items.IndexOf(editing));
+                    break;
+            }
+
+            return;
+        }
+
+        var subtask = list.SelectedItem as SubtaskViewModel;
+        int index = list.SelectedIndex;
+
+        switch (Pressed(e))
+        {
+            case Key.Space when subtask is not null:
+                e.Handled = true;
+                subtask.ToggleCommand.Execute(null);
+                FocusSubtask(list, index);
+                break;
+
+            case Key.Enter when subtask is not null:
+                e.Handled = true;
+                subtask.BeginEdit();
+                break;
+
+            case Key.Delete when subtask is not null:
+                e.Handled = true;
+                subtask.DeleteCommand.Execute(null);
+                if (card.HasSubtasks) FocusSubtask(list, index);
+                else FocusSubtaskInput(card);
+                break;
+
+            case Key.Up when Alt && subtask is not null:
+                e.Handled = true;
+                card.MoveSubtask(subtask, -1);
+                FocusSubtask(list, list.Items.IndexOf(subtask));
+                break;
+
+            case Key.Down when Alt && subtask is not null:
+                e.Handled = true;
+                card.MoveSubtask(subtask, 1);
+                FocusSubtask(list, list.Items.IndexOf(subtask));
+                break;
+
+            // Вверх с первого пункта — в заметку, вниз с последнего — в строку добавления.
+            case Key.Up:
+                e.Handled = true;
+                if (index <= 0) FocusCardNote(card);
+                else FocusSubtask(list, index - 1);
+                break;
+
+            case Key.Down:
+                e.Handled = true;
+                if (index >= list.Items.Count - 1) FocusSubtaskInput(card);
+                else FocusSubtask(list, index + 1);
+                break;
+
+            case Key.Tab when !Shift:
+                e.Handled = true;
+                FocusSubtaskInput(card);
+                break;
+
+            case Key.Tab when Shift:
+                e.Handled = true;
+                FocusCardNote(card);
+                break;
+
+            case Key.Escape:
+                e.Handled = true;
+                FocusCard(card);
+                break;
+        }
+    }
+
+    /// <summary>Строка «+ подзадача». Набранное не теряется: его подбирает уход фокуса.</summary>
+    private void HandleSubtaskInputKeys(KeyEventArgs e, TextBox input)
+    {
+        if (input.DataContext is not TaskCardViewModel card) return;
+
+        switch (e.Key)
+        {
+            case Key.Enter:
+                e.Handled = true;
+                AddSubtask(input, card); // каретка остаётся здесь: список диктуется подряд
+                break;
+
+            case Key.Up:
+                e.Handled = true;
+                if (card.HasSubtasks && CardElement(card, "SubtaskList") is ListBox list)
+                    FocusSubtask(list, card.Subtasks.Count - 1);
+                else
+                    FocusCardNote(card);
+                break;
+
+            case Key.Tab when Shift:
+                e.Handled = true;
+                FocusCardNote(card);
+                break;
+
+            case Key.Tab:
+            case Key.Escape:
+                e.Handled = true;
+                FocusCard(card);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Заметка внутри карточки. Без своей ветки её клавиши уходили бы в список задач:
+    /// пробел в тексте выполнял бы задачу, а стрелки сворачивали карточку.
+    /// </summary>
+    private void HandleCardNoteKeys(KeyEventArgs e, TextBox note)
+    {
+        if (note.DataContext is not TaskCardViewModel card) return;
+
+        switch (e.Key)
+        {
+            case Key.Tab when !Shift:
+                e.Handled = true;
+                FocusSubtaskInput(card);
+                break;
+
+            case Key.Escape:
+                e.Handled = true;
+                FocusCard(card);
+                break;
+        }
+    }
+
+    private static void AddSubtask(TextBox input, TaskCardViewModel card)
+    {
+        var title = input.Text.Trim();
+        if (title.Length == 0) return;
+
+        card.AddSubtask(title);
+        input.Clear();
+    }
+
+    private void OnSubtaskInputLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox { DataContext: TaskCardViewModel card } input) AddSubtask(input, card);
+    }
+
+    /// <summary>Вставка списка: каждая строка становится отдельным пунктом.</summary>
+    private void OnSubtaskPasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: TaskCardViewModel card } input) return;
+        if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText)) return;
+        if (e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string pasted) return;
+
+        var lines = pasted.Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0)
+            .ToList();
+
+        if (lines.Count < 2) return; // одна строка — обычная вставка в поле
+
+        e.CancelCommand();
+        foreach (var line in lines) card.AddSubtask(line.Length > 500 ? line[..500] : line);
+        input.Clear();
+    }
+
+    private void OnSubtaskClicked(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2) return;
+        if ((sender as FrameworkElement)?.DataContext is not SubtaskViewModel subtask) return;
+
+        subtask.BeginEdit();
+        e.Handled = true;
+    }
+
+    private void OnSubtaskEditorVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not true || sender is not TextBox editor) return;
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            editor.Focus();
+            editor.SelectAll();
+        }, DispatcherPriority.Input);
+    }
+
+    /// <summary>Как и у заголовка задачи: уход фокуса завершает правку, а не подвешивает её.</summary>
+    private void OnSubtaskEditorLostFocus(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SubtaskViewModel subtask) subtask.CommitEdit();
+    }
+
+    private static void FocusSubtask(ListBox list, int index)
+    {
+        if (list.Items.Count == 0) return;
+
+        index = Math.Clamp(index, 0, list.Items.Count - 1);
+        list.SelectedIndex = index;
+        list.UpdateLayout();
+
+        if (list.ItemContainerGenerator.ContainerFromIndex(index) is ListBoxItem row) row.Focus();
+    }
+
+    private void FocusSubtaskInput(TaskCardViewModel card)
+    {
+        card.IsExpanded = true;
+
+        // Следующим проходом: поле могло стать видимым только что и ещё не в дереве.
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (CardElement(card, "SubtaskInput") is TextBox input)
+            {
+                input.Focus();
+                input.CaretIndex = input.Text.Length;
+            }
+        }, DispatcherPriority.Input);
+    }
+
+    /// <summary>Вернуть фокус на саму карточку — из заметки и из чеклиста по Esc.</summary>
+    private void FocusCard(TaskCardViewModel card)
+    {
+        var list = List.Items.Contains(card) ? List : CompletedList;
+        FocusList(list.Items.IndexOf(card), list);
+    }
+
+    /// <summary>Элемент внутри карточки по имени: строка живёт в одном из двух списков.</summary>
+    private FrameworkElement? CardElement(TaskCardViewModel card, string name)
+    {
+        foreach (var list in new[] { List, CompletedList })
+        {
+            int index = list.Items.IndexOf(card);
+            if (index < 0) continue;
+
+            list.UpdateLayout();
+            if (list.ItemContainerGenerator.ContainerFromIndex(index) is ListBoxItem row) return FindDescendant(row, name);
+        }
+
+        return null;
+    }
+
     /// <summary>При пустом заголовке Tab не делает ничего и молчит — раздел 7.</summary>
     private void OpenNote()
     {
@@ -369,14 +654,14 @@ public partial class MainWindow : Window
 
     private void FocusCardNote(TaskCardViewModel card)
     {
-        int index = List.Items.IndexOf(card);
-        List.SelectedIndex = index;
+        var list = List.Items.Contains(card) ? List : CompletedList;
+        list.SelectedIndex = list.Items.IndexOf(card);
+        card.IsExpanded = true;
 
+        // Следующим проходом: поле могло стать видимым только что и ещё не в дереве.
         Dispatcher.BeginInvoke(() =>
         {
-            List.UpdateLayout();
-            if (List.ItemContainerGenerator.ContainerFromIndex(index) is ListBoxItem row &&
-                FindDescendant(row, "NoteEditor") is TextBox editor)
+            if (CardElement(card, "NoteEditor") is TextBox editor)
             {
                 editor.Focus();
                 editor.CaretIndex = editor.Text.Length;
