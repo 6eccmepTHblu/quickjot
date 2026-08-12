@@ -415,10 +415,22 @@ public partial class MainWindow : Window
 
     // --- чеклист карточки, раздел 8 ---
 
+    /// <summary>
+    /// Шаг вверх по дереву от того, что под курсором или в фокусе. Одного VisualTreeHelper мало:
+    /// заголовок карточки собран из Run — это ContentElement, а не Visual, и на нём он бросает
+    /// исключение. Необработанное, оно убивало приложение при прокрутке колесом над заголовком.
+    /// </summary>
+    private static DependencyObject? Ancestor(DependencyObject? node) => node switch
+    {
+        null => null,
+        Visual or System.Windows.Media.Media3D.Visual3D => VisualTreeHelper.GetParent(node),
+        _ => LogicalTreeHelper.GetParent(node),
+    };
+
     /// <summary>Чеклист, внутри которого сейчас фокус, — или null, если фокус не в нём.</summary>
     private static ListBox? FocusedSubtaskList()
     {
-        for (var node = Keyboard.FocusedElement as DependencyObject; node is not null; node = VisualTreeHelper.GetParent(node))
+        for (var node = Keyboard.FocusedElement as DependencyObject; node is not null; node = Ancestor(node))
         {
             if (node is ListBox { Name: "SubtaskList" } list) return list;
         }
@@ -729,7 +741,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnListMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        for (var node = e.OriginalSource as DependencyObject; node is not null; node = VisualTreeHelper.GetParent(node))
+        for (var node = e.OriginalSource as DependencyObject; node is not null; node = Ancestor(node))
         {
             if (node is ListBox { Name: "SubtaskList" }) return;
         }

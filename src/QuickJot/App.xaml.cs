@@ -27,6 +27,9 @@ public partial class App : Application
     private Mutex? _instanceLock;
     private SettingsWindow? _settingsWindow;
     private TagsWindow? _tagsWindow;
+
+    /// <summary>О сбое говорим один раз за запуск: череда одинаковых уведомлений — это второй сбой.</summary>
+    private bool _crashReported;
     private EventWaitHandle? _showSignal;
     private SqliteConnection? _db;
     private TaskbarIcon? _tray;
@@ -64,7 +67,18 @@ public partial class App : Application
 
         base.OnStartup(e);
 
-        DispatcherUnhandledException += (_, args) => Log.Write($"UNHANDLED (dispatcher): {args.Exception}");
+        // Резидентное приложение не имеет права молча пропадать из трея из-за сбоя в разметке:
+        // пишем в лог, один раз говорим человеку и живём дальше. Данные к этому моменту уже в базе —
+        // запись синхронная на каждое действие (раздел 12).
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log.Write($"UNHANDLED (dispatcher): {args.Exception}");
+            args.Handled = true;
+
+            if (_crashReported) return;
+            _crashReported = true;
+            _tray?.ShowNotification("QuickJot", "Внутренний сбой. Приложение работает дальше, подробности в log.txt");
+        };
         AppDomain.CurrentDomain.UnhandledException += (_, args) => Log.Write($"UNHANDLED (domain): {args.ExceptionObject}");
 
         // QUICKJOT_DEV=<путь к базе> — прогон интерфейса на отдельной базе, не трогая рабочую.
@@ -121,6 +135,12 @@ public partial class App : Application
         if (!string.IsNullOrEmpty(corner)) Settings.Set("window.corner", corner);
 
         if (Tasks.Active().Count > 0) return;
+
+        // QUICKJOT_DEV_BULK=25 — набить список, чтобы проверять прокрутку и потолок высоты.
+        if (int.TryParse(Environment.GetEnvironmentVariable("QUICKJOT_DEV_BULK"), out int bulk))
+        {
+            for (int i = bulk; i > 0; i--) Tasks.Create($"задача номер {i}");
+        }
 
         var tagged = Tasks.Create("Реализовать тэги для Квикшота", tags: "development ui/ux");
         Tasks.SetFlagged(tagged.Id, true);
