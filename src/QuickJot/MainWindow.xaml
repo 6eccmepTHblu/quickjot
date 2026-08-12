@@ -345,6 +345,7 @@
                      Margin="0,0,0,6"
                      MinHeight="56"
                      MaxHeight="160"
+                     LostKeyboardFocus="OnNoteLostFocus"
                      Visibility="{Binding IsNoteOpen, Converter={StaticResource BoolToVisibility}}"
                      Text="{Binding NoteDraft, UpdateSourceTrigger=PropertyChanged}" />
 
@@ -357,7 +358,7 @@
             <!-- Одна прокручиваемая область на список, пустое состояние и блок выполненного:
                  потолок высоты считается одним числом, а не по каждому списку отдельно (раздел 5). -->
             <ScrollViewer x:Name="Scroll" Grid.Row="3" VerticalScrollBarVisibility="Auto">
-              <StackPanel x:Name="ScrollContent">
+              <StackPanel x:Name="ScrollContent" PreviewMouseWheel="OnListMouseWheel">
 
             <ListBox x:Name="List"
                      ItemsSource="{Binding Tasks}"

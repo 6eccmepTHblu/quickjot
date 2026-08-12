@@ -352,11 +352,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     private TagChip MakeChip(string tag)
     {
-        int index = _tagColors?.Chosen(tag) ?? TagPalette.IndexOf(tag);
+        var hue = TagPalette.Resolve(_tagColors?.Chosen(tag), tag);
         // Полное имя: у самой модели есть свойство Theme, и оно перекрывает класс.
         bool dark = QuickJot.Theme.IsDark(Theme);
 
-        return new TagChip(tag, TagPalette.Background(index, dark), TagPalette.Foreground(index, dark));
+        return new TagChip(tag, TagPalette.Background(hue, dark), TagPalette.Foreground(hue, dark));
     }
 
     /// <summary>

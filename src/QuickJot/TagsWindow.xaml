@@ -137,8 +137,16 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
 
+                                        <!-- Свой цвет кодом: пресетов восемь, а оттенков нужно больше. -->
+                                        <TextBox Text="{Binding CustomText, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="76"
+                                                 Margin="8,0,0,0"
+                                                 FontSize="12"
+                                                 VerticalContentAlignment="Center"
+                                                 ToolTip="Свой цвет: #RRGGBB" />
+
                                         <Button Content="авто" Style="{StaticResource Plain}" FontSize="12"
-                                                Margin="6,0,0,0"
+                                                Margin="4,0,0,0"
                                                 Command="{Binding PickCommand}" />
                                     </StackPanel>
 

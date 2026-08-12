@@ -26,6 +26,22 @@ internal static class TagPalette
     public static Color Hue(int index) => Hues[((index % Count) + Count) % Count];
 
     /// <summary>
+    /// Во что превращается сохранённый выбор: номер оттенка, свой цвет «#RRGGBB» или,
+    /// если не выбрано ничего, оттенок, посчитанный из имени.
+    /// </summary>
+    public static Color Resolve(string? chosen, string tag)
+    {
+        if (string.IsNullOrWhiteSpace(chosen)) return Hue(IndexOf(tag));
+        if (int.TryParse(chosen, out int index)) return Hue(index);
+
+        try { return (Color)ColorConverter.ConvertFromString(chosen); }
+        catch { return Hue(IndexOf(tag)); } // испорченное значение не должно ронять список
+    }
+
+    /// <summary>Цвет в том виде, в каком он ложится в настройки.</summary>
+    public static string ToStored(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    /// <summary>
     /// Свой хеш, а не string.GetHashCode: тот в .NET рандомизируется при каждом запуске,
     /// и цвет тега менялся бы от запуска к запуску.
     /// </summary>
@@ -38,16 +54,10 @@ internal static class TagPalette
     }
 
     /// <summary>Подложка чипа: тот же оттенок, но прозрачный, чтобы не спорить с Mica.</summary>
-    public static SolidColorBrush Background(int index, bool dark)
-    {
-        var hue = Hue(index);
-        return new SolidColorBrush(Color.FromArgb(dark ? (byte)0x33 : (byte)0x28, hue.R, hue.G, hue.B));
-    }
+    public static SolidColorBrush Background(Color hue, bool dark) =>
+        new(Color.FromArgb(dark ? (byte)0x33 : (byte)0x28, hue.R, hue.G, hue.B));
 
     /// <summary>Текст чипа: на тёмном фоне оттенок осветляется, на светлом — затемняется.</summary>
-    public static SolidColorBrush Foreground(int index, bool dark)
-    {
-        var hue = Hue(index);
-        return new SolidColorBrush(dark ? Theme.Lightened(hue, 0.35) : Theme.Darkened(hue, 0.35));
-    }
+    public static SolidColorBrush Foreground(Color hue, bool dark) =>
+        new(dark ? Theme.Lightened(hue, 0.35) : Theme.Darkened(hue, 0.35));
 }

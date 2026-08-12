@@ -722,6 +722,31 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(() => Note.Focus(), DispatcherPriority.Input);
     }
 
+    /// <summary>
+    /// Колесо мыши над списком. Внутренний ScrollViewer у ListBox съедает событие, даже когда
+    /// прокручивать ему нечего, — поэтому крутим внешнюю область сами. Чеклист внутри карточки
+    /// со своей прокруткой пропускаем: там колесо принадлежит ему.
+    /// </summary>
+    private void OnListMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        for (var node = e.OriginalSource as DependencyObject; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is ListBox { Name: "SubtaskList" }) return;
+        }
+
+        Scroll.ScrollToVerticalOffset(Scroll.VerticalOffset - e.Delta);
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Поле заметки при создании задачи закрывается, как только из него ушли пустым — раздел 7.
+    /// Иначе оно висит поверх ввода до перезапуска: черновик пуст, а место занято.
+    /// </summary>
+    private void OnNoteLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(Note.Text)) _viewModel.IsNoteOpen = false;
+    }
+
     /// <summary>Esc из заметки: фокус в заголовок, но непустое поле остаётся раскрытым — раздел 7.</summary>
     private void ReturnToTitle()
     {

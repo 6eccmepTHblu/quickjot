@@ -51,9 +51,9 @@ public sealed partial class TagsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsEmpty));
     }
 
-    private void OnColorChosen(TagRowViewModel row, int? index)
+    private void OnColorChosen(TagRowViewModel row, string? chosen)
     {
-        _colors.Choose(row.Name, index);
+        _colors.Choose(row.Name, chosen);
         ColorsChanged?.Invoke();
     }
 
@@ -73,7 +73,7 @@ public sealed partial class TagRowViewModel : ObservableObject
 {
     private readonly bool _dark;
 
-    public TagRowViewModel(string name, int count, int? chosen, bool dark)
+    public TagRowViewModel(string name, int count, string? chosen, bool dark)
     {
         Name = name;
         Count = count;
@@ -82,6 +82,7 @@ public sealed partial class TagRowViewModel : ObservableObject
 
         // «Авто» — такой же вариант выбора, как цвет: им сбрасывают ручной цвет обратно.
         Swatches = [.. Enumerable.Range(0, TagPalette.Count).Select(index => new TagSwatch(index, dark))];
+        _customText = TagPalette.ToStored(Hue);
 
         UpdateSelection();
     }
@@ -97,33 +98,76 @@ public sealed partial class TagRowViewModel : ObservableObject
     public IReadOnlyList<TagSwatch> Swatches { get; }
 
     [ObservableProperty]
-    private int? _chosen;
+    private string? _chosen;
+
+    /// <summary>
+    /// Свой цвет как «#RRGGBB». Применяется по мере набора: как только строка стала цветом,
+    /// чип перекрашивается — отдельной кнопки «применить» для шести символов заводить незачем.
+    /// </summary>
+    [ObservableProperty]
+    private string _customText;
+
+    /// <summary>Поле обновляют кружки палитры — это не выбор пользователя и применять его не надо.</summary>
+    private bool _syncing;
+
+    partial void OnCustomTextChanged(string value)
+    {
+        if (_syncing) return;
+        if (!TryParse(value, out var color) || TagPalette.ToStored(color) == TagPalette.ToStored(Hue)) return;
+
+        Apply(TagPalette.ToStored(color));
+    }
+
+    private static bool TryParse(string? text, out Color color)
+    {
+        color = default;
+        if (string.IsNullOrWhiteSpace(text) || text.TrimStart()[0] != '#') return false;
+
+        try
+        {
+            color = (Color)ColorConverter.ConvertFromString(text.Trim());
+            return true;
+        }
+        catch
+        {
+            return false; // недописанный «#3A7» — это ещё не цвет, а не ошибка
+        }
+    }
 
     public bool IsAuto => Chosen is null;
 
-    public Brush Background => TagPalette.Background(Index, _dark);
+    public Brush Background => TagPalette.Background(Hue, _dark);
 
-    public Brush Foreground => TagPalette.Foreground(Index, _dark);
+    public Brush Foreground => TagPalette.Foreground(Hue, _dark);
 
-    private int Index => Chosen ?? TagPalette.IndexOf(Name);
+    private Color Hue => TagPalette.Resolve(Chosen, Name);
 
     /// <summary>Подтверждение удаления прямо в строке: тег стирается сразу из всех задач.</summary>
     [ObservableProperty]
     private bool _isConfirming;
 
-    public event Action<TagRowViewModel, int?>? ColorChosen;
+    public event Action<TagRowViewModel, string?>? ColorChosen;
 
     public event Action<TagRowViewModel>? DeleteConfirmed;
 
     [RelayCommand]
-    private void Pick(object? parameter)
+    private void Pick(object? parameter) =>
+        Apply(parameter is TagSwatch swatch ? swatch.Index.ToString() : null);
+
+    private void Apply(string? chosen)
     {
-        Chosen = parameter is TagSwatch swatch ? swatch.Index : null;
+        Chosen = chosen;
         UpdateSelection();
 
         OnPropertyChanged(nameof(Background));
         OnPropertyChanged(nameof(Foreground));
         OnPropertyChanged(nameof(IsAuto));
+
+        // Поле кода держится в согласии с выбранным кружком, но само себя не перезапускает.
+        _syncing = true;
+        CustomText = TagPalette.ToStored(Hue);
+        _syncing = false;
+
         ColorChosen?.Invoke(this, Chosen);
     }
 
@@ -138,7 +182,7 @@ public sealed partial class TagRowViewModel : ObservableObject
 
     private void UpdateSelection()
     {
-        foreach (var swatch in Swatches) swatch.IsSelected = swatch.Index == Chosen;
+        foreach (var swatch in Swatches) swatch.IsSelected = swatch.Index.ToString() == Chosen;
     }
 }
 
@@ -149,7 +193,7 @@ public sealed partial class TagSwatch(int index, bool dark) : ObservableObject
 
     public Brush Fill { get; } = new SolidColorBrush(TagPalette.Hue(index));
 
-    public Brush Ring { get; } = TagPalette.Foreground(index, dark);
+    public Brush Ring { get; } = TagPalette.Foreground(TagPalette.Hue(index), dark);
 
     [ObservableProperty]
     private bool _isSelected;
