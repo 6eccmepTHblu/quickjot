@@ -31,10 +31,6 @@
             M2.5,2.5 H13.5 A2,2 0 0 1 15.5,4.5 V10.5 A2,2 0 0 1 13.5,12.5 H7 L3.9,15.2 A0.5,0.5 0 0 1 3,14.8 V12.5
             H2.5 A2,2 0 0 1 0.5,10.5 V4.5 A2,2 0 0 1 2.5,2.5 Z
         </Geometry>
-        <Geometry x:Key="TrashGlyph">
-            M6,1.5 H10 A1,1 0 0 1 11,2.5 V3 H14.2 V4.4 H1.8 V3 H5 V2.5 A1,1 0 0 1 6,1.5 Z
-            M3.6,5.8 H12.4 L11.7,14 A1.4,1.4 0 0 1 10.3,15.3 H5.7 A1.4,1.4 0 0 1 4.3,14 Z
-        </Geometry>
 
         <!--
             Поля без рамки: только каретка и placeholder (раздел 15). Стандартный шаблон Fluent
@@ -372,7 +368,7 @@
 
                         <!-- Рамка всегда на месте и прозрачна: фокусное кольцо не должно двигать текст. -->
                         <Border x:Name="Card"
-                                MinHeight="64"
+                                MinHeight="44"
                                 CornerRadius="10"
                                 BorderThickness="1"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
@@ -463,17 +459,22 @@
                                         </Button>
                                     </Grid>
 
-                                    <!-- Ярус 2: облачко слева, мусорка справа -->
-                                    <Grid Grid.Row="1" Margin="0,4,0,0">
+                                    <!--
+                                        Ярус 2 существует, только когда на нём что-то есть: облачко
+                                        заметки или счётчик чеклиста. У обычной задачи из одного
+                                        заголовка он занимал целую строку впустую.
+                                    -->
+                                    <Grid Grid.Row="1" Margin="0,4,0,0"
+                                          Visibility="{Binding HasSecondTier, Converter={StaticResource BoolToVisibility}}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
                                         <Button Grid.Column="0"
                                                 Style="{StaticResource CardIconButton}"
                                                 Command="{Binding ToggleNoteCommand}"
+                                                Visibility="{Binding HasNotes, Converter={StaticResource BoolToVisibility}}"
                                                 ToolTip="Заметка">
                                             <Path x:Name="NoteIcon"
                                                   Style="{StaticResource CardGlyph}"
@@ -489,16 +490,6 @@
                                                    FontSize="12"
                                                    VerticalAlignment="Center"
                                                    HorizontalAlignment="Left" />
-
-                                        <Button Grid.Column="2"
-                                                x:Name="DeleteButton"
-                                                Style="{StaticResource CardIconButton}"
-                                                Command="{Binding DeleteCommand}"
-                                                ToolTip="Удалить">
-                                            <Path x:Name="TrashIcon"
-                                                  Style="{StaticResource CardGlyph}"
-                                                  Data="{StaticResource TrashGlyph}" />
-                                        </Button>
                                     </Grid>
 
                                     <!-- Развёрнутая заметка. Пустая — это поле для её добавления. -->
@@ -627,11 +618,6 @@
                             </DataTrigger>
                             <DataTrigger Binding="{Binding DropIndicator}" Value="Below">
                                 <Setter TargetName="DropBelow" Property="Visibility" Value="Visible" />
-                            </DataTrigger>
-
-                            <!-- Мусорка краснеет только при наведении на саму иконку — раздел 8. -->
-                            <DataTrigger Binding="{Binding IsMouseOver, ElementName=DeleteButton}" Value="True">
-                                <Setter TargetName="TrashIcon" Property="Fill" Value="{DynamicResource DangerBrush}" />
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>

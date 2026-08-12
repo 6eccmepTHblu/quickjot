@@ -640,6 +640,7 @@ public sealed partial class TaskCardViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasNotes))]
+    [NotifyPropertyChangedFor(nameof(HasSecondTier))]
     private string? _notes;
 
     [ObservableProperty]
@@ -688,8 +689,14 @@ public sealed partial class TaskCardViewModel : ObservableObject
     /// <summary>Esc — откатить изменение заголовка — раздел 10.</summary>
     public void CancelEdit() => IsEditing = false;
 
-    /// <summary>Облачко видно всегда, активный цвет — когда заметка есть.</summary>
+    /// <summary>Облачко видно, только когда заметка есть.</summary>
     public bool HasNotes => !string.IsNullOrWhiteSpace(Notes);
+
+    /// <summary>
+    /// Нижний ярус карточки. Пустым он не показывается: у задачи из одного заголовка
+    /// это была бы лишняя строка, которая просто занимает высоту.
+    /// </summary>
+    public bool HasSecondTier => HasNotes || HasSubtasks;
 
     // --- чеклист, раздел 8 ---
 
@@ -782,6 +789,7 @@ public sealed partial class TaskCardViewModel : ObservableObject
     {
         SubtaskChange = description;
         OnPropertyChanged(nameof(HasSubtasks));
+        OnPropertyChanged(nameof(HasSecondTier));
         OnPropertyChanged(nameof(SubtaskCounter));
         OnPropertyChanged(nameof(AllSubtasksDone));
         OnPropertyChanged(nameof(SubtasksText)); // последним: на него подписана запись в базу
