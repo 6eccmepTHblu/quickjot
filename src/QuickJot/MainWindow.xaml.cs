@@ -120,6 +120,11 @@ public partial class MainWindow : Window
         // Отложенно: пересчёт сам вызывает UpdateLayout и внутри чужого прохода разметки делать его нельзя.
         Note.IsVisibleChanged += (_, _) =>
             Dispatcher.BeginInvoke(ApplyHeightCeiling, DispatcherPriority.Background);
+
+        // Выделение живёт, только пока список в фокусе. Подсвеченная карточка при наборе в поле
+        // ввода ничего не значит и просто мозолит глаз — раздел 15.
+        List.IsKeyboardFocusWithinChanged += DropSelectionOnBlur;
+        CompletedList.IsKeyboardFocusWithinChanged += DropSelectionOnBlur;
     }
 
     /// <summary>
@@ -601,6 +606,11 @@ public partial class MainWindow : Window
 
         AddSubtask(input, card);
         if (!card.HasSubtasks) card.IsSubtaskRequested = false; // ушли, ничего не добавив — строка снова не нужна
+    }
+
+    private static void DropSelectionOnBlur(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is false && sender is ListBox list) list.SelectedIndex = -1;
     }
 
     /// <summary>Ушли с карточки, ничего не написав, — открытые по запросу пустые поля прячутся.</summary>
