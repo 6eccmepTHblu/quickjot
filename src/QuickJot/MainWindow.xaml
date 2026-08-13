@@ -242,7 +242,11 @@
 
         <!-- Пункт чеклиста — раздел 8. Чекбокс, текст, крестик по наведению. -->
         <DataTemplate x:Key="SubtaskTemplate">
-            <Grid>
+            <Grid x:Name="SubRow">
+                <!-- Появление и уход пункта — тем же приёмом, что у строки задачи. -->
+                <Grid.LayoutTransform>
+                    <ScaleTransform x:Name="SubRowScale" />
+                </Grid.LayoutTransform>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -298,6 +302,61 @@
                 <DataTrigger Binding="{Binding IsEditing}" Value="True">
                     <Setter TargetName="SubtaskText" Property="Visibility" Value="Collapsed" />
                     <Setter TargetName="SubtaskEditor" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+
+                <!-- Добавленный пункт вырастает на месте, а не появляется рывком под курсором. -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsNew}" Value="True" />
+                        <Condition Binding="{Binding DataContext.AnimationsOn, RelativeSource={RelativeSource AncestorType=Window}}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <MultiDataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetName="SubRowScale"
+                                                 Storyboard.TargetProperty="ScaleY"
+                                                 From="0" To="1" Duration="0:0:0.14">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut" />
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                                <DoubleAnimation Storyboard.TargetName="SubRow"
+                                                 Storyboard.TargetProperty="Opacity"
+                                                 From="0" To="1" Duration="0:0:0.14" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </MultiDataTrigger.EnterActions>
+                </MultiDataTrigger>
+
+                <DataTrigger Binding="{Binding IsLeaving}" Value="True">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetName="SubRowScale"
+                                                 Storyboard.TargetProperty="ScaleY"
+                                                 To="0" Duration="0:0:0.18">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseIn" />
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                                <DoubleAnimation Storyboard.TargetName="SubRow"
+                                                 Storyboard.TargetProperty="Opacity"
+                                                 To="0" Duration="0:0:0.14" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetName="SubRowScale"
+                                                 Storyboard.TargetProperty="ScaleY"
+                                                 To="1" Duration="0:0:0.12" />
+                                <DoubleAnimation Storyboard.TargetName="SubRow"
+                                                 Storyboard.TargetProperty="Opacity"
+                                                 To="1" Duration="0:0:0.12" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -444,7 +503,16 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                      <Grid>
+                      <Grid x:Name="Row">
+                        <!--
+                            Схлопывание при уходе — раздел 15. Именно LayoutTransform, а не
+                            RenderTransform: сжиматься должна разметка, иначе на месте строки
+                            останется дыра, и соседи доедут вверх рывком уже после удаления.
+                        -->
+                        <Grid.LayoutTransform>
+                            <ScaleTransform x:Name="RowScale" />
+                        </Grid.LayoutTransform>
+
                         <!-- Место вставки при перетаскивании — раздел 9. -->
                         <Rectangle x:Name="DropAbove" Height="2" Margin="4,0" VerticalAlignment="Top"
                                    RadiusX="1" RadiusY="1" Visibility="Collapsed"
@@ -765,6 +833,42 @@
                             <DataTrigger Binding="{Binding IsFlagged}" Value="True">
                                 <Setter TargetName="FlagGlyph" Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                 <Setter TargetName="FlagButton" Property="Opacity" Value="1" />
+                            </DataTrigger>
+
+                            <!--
+                                Уход строки. Условия на AnimationsOn нет: признак ставится только
+                                тогда, когда анимации включены, иначе строку убирают сразу.
+                                Обратный ход нужен для Ctrl+Z: строку могут вернуть на полпути.
+                            -->
+                            <DataTrigger Binding="{Binding IsLeaving}" Value="True">
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="RowScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             To="0" Duration="0:0:0.18">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseIn" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="Row"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.14" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="RowScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             To="1" Duration="0:0:0.12" />
+                                            <DoubleAnimation Storyboard.TargetName="Row"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.12" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.ExitActions>
                             </DataTrigger>
 
                             <DataTrigger Binding="{Binding DropIndicator}" Value="Above">

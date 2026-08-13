@@ -205,6 +205,9 @@ public sealed partial class MainViewModel : ObservableObject
         MaxHeightShare = Math.Clamp(_settings?.GetDouble(SettingKeys.MaxHeightShare, 0.6) ?? 0.6, 0.2, 0.95);
 
         AnimationsEnabled = _settings?.GetBool(SettingKeys.Animations, true) ?? true;
+        // Уход строк играется из карточек, а настройки знает только список. Без запущенного
+        // приложения таймеру некому тикать, поэтому в проверках строка уходит сразу.
+        Leaving.Animated = AnimationsOn && Application.Current is not null;
         Theme = _settings?.Get(SettingKeys.Theme) ?? "system";
     }
 
@@ -460,8 +463,11 @@ public sealed partial class MainViewModel : ObservableObject
             timer.Stop();
             if (!card.IsCompleted) return; // успели снять галочку — задача никуда не едет
 
-            Tasks.Remove(card);
-            CompletedToday.Insert(0, card);
+            Leaving.Play(card, () =>
+            {
+                Tasks.Remove(card);
+                CompletedToday.Insert(0, card);
+            });
         };
         timer.Start();
     }
@@ -469,10 +475,20 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Возврат из выполненных: задача встаёт на прежнее место, sort_order не менялся — раздел 9.</summary>
     private void ReturnToActive(TaskCardViewModel card)
     {
-        CompletedToday.Remove(card);
-        if (Tasks.Contains(card)) return; // галочку сняли до того, как карточка уехала в блок
+        // Галочку сняли до того, как карточка уехала в блок: она остаётся на месте,
+        // а начатый уход надо отменить, иначе строка схлопнется зря.
+        if (!CompletedToday.Contains(card))
+        {
+            card.IsLeaving = false;
+            return;
+        }
 
-        InsertByOrder(card);
+        Leaving.Play(card, () =>
+        {
+            CompletedToday.Remove(card);
+            InsertByOrder(card);
+            Highlight(card); // задача вернулась в середину списка — иначе её там не найти
+        });
     }
 
     private void InsertByOrder(TaskCardViewModel card)
@@ -536,17 +552,26 @@ public sealed partial class MainViewModel : ObservableObject
         Draft = "";
         NoteDraft = "";
         IsNoteOpen = false;
-
-        // Полноценная анимация вставки — этап 10, здесь достаточно снять подсветку по таймеру.
-        var highlight = new DispatcherTimer { Interval = HighlightDuration };
-        highlight.Tick += (_, _) =>
-        {
-            highlight.Stop();
-            card.IsNew = false;
-        };
-        highlight.Start();
+        Highlight(card);
 
         return true;
+    }
+
+    /// <summary>
+    /// Кратко подсветить строку: она только что появилась — создана, восстановлена или вернулась
+    /// из выполненных. Саму подсветку гасит разметка, здесь достаточно снять признак по таймеру.
+    /// </summary>
+    private static void Highlight(TaskCardViewModel card)
+    {
+        card.IsNew = true;
+
+        var timer = new DispatcherTimer { Interval = HighlightDuration };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            card.IsNew = false;
+        };
+        timer.Start();
     }
 
     /// <summary>
@@ -637,22 +662,34 @@ public sealed partial class MainViewModel : ObservableObject
         ShowToast("Задача удалена");
     }
 
+    /// <summary>База правится сразу, из списка строка уходит после того, как схлопнется — раздел 15.</summary>
     private void RemoveCard(TaskCardViewModel card)
     {
         _tasks.Delete(card.Id);
         Detach(card);
-        Tasks.Remove(card);
-        CompletedToday.Remove(card);
+
+        Leaving.Play(card, () =>
+        {
+            Tasks.Remove(card);
+            CompletedToday.Remove(card);
+        });
     }
 
     private void RestoreCard(TaskCardViewModel card)
     {
         _tasks.Restore(card.Id);
+        card.IsLeaving = false; // отменяет незавершённый уход: строка ещё на экране
         card.PropertyChanged += OnCardChanged;
         card.DeleteRequested += OnDeleteRequested;
 
-        if (card.IsCompleted) CompletedToday.Insert(0, card);
-        else InsertByOrder(card);
+        // Ctrl+Z успели нажать, пока строка схлопывалась, — вставлять её второй раз нельзя.
+        if (!Tasks.Contains(card) && !CompletedToday.Contains(card))
+        {
+            if (card.IsCompleted) CompletedToday.Insert(0, card);
+            else InsertByOrder(card);
+        }
+
+        Highlight(card);
     }
 
     /// <summary>
@@ -770,7 +807,7 @@ public enum DropSide
     Below,
 }
 
-public sealed partial class TaskCardViewModel : ObservableObject
+public sealed partial class TaskCardViewModel : ObservableObject, ILeaving
 {
     /// <summary>Откуда берётся цвет чипа. Подставляется списком: он знает и настройки, и тему.</summary>
     private readonly Func<string, TagChip> _chip;
@@ -847,6 +884,10 @@ public sealed partial class TaskCardViewModel : ObservableObject
     /// <summary>Кратковременная подсветка только что созданной задачи.</summary>
     [ObservableProperty]
     private bool _isNew;
+
+    /// <summary>Строка схлопывается перед тем, как уйти из списка — раздел 15.</summary>
+    [ObservableProperty]
+    private bool _isLeaving;
 
     /// <summary>Куда встанет перетаскиваемая задача — полоска сверху или снизу карточки.</summary>
     [ObservableProperty]
@@ -941,7 +982,8 @@ public sealed partial class TaskCardViewModel : ObservableObject
 
     public SubtaskViewModel AddSubtask(string title)
     {
-        var subtask = Attach(new SubtaskViewModel(new Subtask(false, title.Trim())));
+        // IsNew до вставки: разметка играет появление строки, когда контейнер уже с этим признаком.
+        var subtask = Attach(new SubtaskViewModel(new Subtask(false, title.Trim())) { IsNew = true });
         Subtasks.Add(subtask);
         NotifySubtasks("Подзадача добавлена");
         return subtask;
@@ -950,7 +992,13 @@ public sealed partial class TaskCardViewModel : ObservableObject
     public void RemoveSubtask(SubtaskViewModel subtask)
     {
         Detach(subtask);
-        if (Subtasks.Remove(subtask)) NotifySubtasks("Подзадача удалена");
+        if (!Subtasks.Contains(subtask)) return;
+
+        Leaving.Play(subtask, () =>
+        {
+            Subtasks.Remove(subtask);
+            NotifySubtasks("Подзадача удалена");
+        });
     }
 
     /// <summary>Alt+↑↓ внутри чеклиста — раздел 10. Порядок тут позиционный, sort_order не нужен.</summary>
@@ -1028,10 +1076,17 @@ public sealed partial class TaskCardViewModel : ObservableObject
 /// Пункт чеклиста. Ведёт себя как маленькая карточка и слушает те же клавиши (раздел 10):
 /// Space — выполнить, Enter — править, Delete — удалить, Alt+↑↓ — переставить.
 /// </summary>
-public sealed partial class SubtaskViewModel(Subtask subtask) : ObservableObject
+public sealed partial class SubtaskViewModel(Subtask subtask) : ObservableObject, ILeaving
 {
     [ObservableProperty]
     private bool _isDone = subtask.Done;
+
+    /// <summary>Признаки появления и ухода строки — раздел 15, те же, что у карточки.</summary>
+    [ObservableProperty]
+    private bool _isNew;
+
+    [ObservableProperty]
+    private bool _isLeaving;
 
     [ObservableProperty]
     private string _title = subtask.Title;

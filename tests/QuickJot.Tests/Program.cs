@@ -39,6 +39,7 @@ internal static class Program
         Run("теги: разбор строки ввода", TagParsing);
         Run("теги: создание, правка, фильтр, удаление", Tags);
         Run("чеклист: правка, порядок, отмена, фильтр", Checklist);
+        Run("уход строки: отмена на полпути", LeavingRows);
 
         Console.WriteLine(_failures == 0 ? "\nвсе проверки прошли" : $"\nпровалено: {_failures}");
         return _failures == 0 ? 0 : 1;
@@ -732,6 +733,48 @@ internal static class Program
     /// <summary>
     /// Чеклист целиком: добавление, выполнение, порядок, запись в базу, отмена и поиск по пунктам.
     /// </summary>
+    /// <summary>
+    /// Уход строки — раздел 15. Пока строка схлопывается, она ещё в списке: Ctrl+Z на полпути
+    /// обязан вернуть ту же строку, а не вставить её вторым экземпляром.
+    /// </summary>
+    private static void LeavingRows(TaskRepository repo)
+    {
+        var vm = new MainViewModel(repo);
+        vm.Draft = "уходящая";
+        vm.Create();
+
+        var card = vm.Tasks[0];
+        card.AddSubtask("пункт");
+
+        // В проверках уход отключён — таймеру некому тикать. Здесь он включается намеренно,
+        // ради состояния «строка уже уходит, но ещё на экране»: только в нём и ловится ошибка.
+        Leaving.Animated = true;
+        try
+        {
+            card.DeleteCommand.Execute(null);
+            Check(vm.Tasks.Count == 1 && card.IsLeaving, "строка исчезла, не успев схлопнуться");
+            Check(repo.Active().Count == 0, "удаление не дошло до базы сразу");
+
+            vm.UndoCommand.Execute(null);
+            Check(vm.Tasks.Count == 1, "отмена на полпути вставила вторую копию задачи");
+            Check(!card.IsLeaving, "отмена не остановила уход строки");
+
+            Pump(TimeSpan.FromMilliseconds(400)); // к этому моменту таймер ухода уже отработал бы
+            Check(vm.Tasks.Count == 1, "таймер ухода убрал возвращённую задачу");
+
+            var subtask = card.Subtasks[0];
+            subtask.DeleteCommand.Execute(null);
+            Check(card.Subtasks.Count == 1 && subtask.IsLeaving, "пункт исчез, не успев схлопнуться");
+
+            Pump(TimeSpan.FromMilliseconds(400));
+            Check(card.Subtasks.Count == 0, "пункт остался в чеклисте после ухода");
+        }
+        finally
+        {
+            Leaving.Animated = false;
+        }
+    }
+
     private static void Checklist(TaskRepository repo)
     {
         var vm = new MainViewModel(repo);
