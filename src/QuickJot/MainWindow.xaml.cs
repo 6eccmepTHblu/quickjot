@@ -375,10 +375,38 @@ public partial class MainWindow : Window
 
     private void HandleEditKeys(KeyEventArgs e, TaskCardViewModel card)
     {
+        // Открытая подсказка тегов забирает стрелки, Tab и Esc — так же, как в поле ввода.
+        if (_viewModel.IsSuggesting)
+        {
+            switch (e.Key)
+            {
+                case Key.Up:
+                    e.Handled = true;
+                    _viewModel.MoveSuggestion(-1);
+                    return;
+
+                case Key.Down:
+                    e.Handled = true;
+                    _viewModel.MoveSuggestion(1);
+                    return;
+
+                case Key.Tab:
+                    e.Handled = true;
+                    ApplySuggestion();
+                    return;
+
+                case Key.Escape:
+                    e.Handled = true;
+                    _viewModel.CloseSuggestions();
+                    return;
+            }
+        }
+
         switch (e.Key)
         {
             case Key.Enter:
                 e.Handled = true;
+                _viewModel.CloseSuggestions();
                 card.CommitEdit();
                 FocusList(List.Items.IndexOf(card));
                 break;
@@ -405,13 +433,30 @@ public partial class MainWindow : Window
     private void OnInputSelectionChanged(object sender, RoutedEventArgs e) =>
         _viewModel.UpdateSuggestions(Input.Text, Input.CaretIndex);
 
+    /// <summary>
+    /// То же для правки заголовка карточки: теги дописывают и в уже созданной задаче,
+    /// и держать их в голове человек не обязан.
+    /// </summary>
+    private void OnCardTitleSelectionChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox { IsKeyboardFocused: true } editor)
+        {
+            _viewModel.UpdateSuggestions(editor.Text, editor.CaretIndex, inCard: true);
+        }
+    }
+
+    /// <summary>Поле, которое сейчас кормит подсказку: правка карточки, иначе поле ввода.</summary>
+    private TextBox SuggestionField =>
+        EditingCard is { } card && CardElement(card, "TitleEditor") is TextBox editor ? editor : Input;
+
     private void ApplySuggestion(TagSuggestion? chosen = null)
     {
-        var (text, caret) = _viewModel.ApplySuggestion(Input.Text, Input.CaretIndex, chosen);
+        var field = SuggestionField;
+        var (text, caret) = _viewModel.ApplySuggestion(field.Text, field.CaretIndex, chosen);
 
-        Input.Text = text; // привязка сама донесёт до черновика
-        Input.CaretIndex = caret;
-        Input.Focus();
+        field.Text = text; // привязка сама донесёт до черновика или до буфера правки
+        field.CaretIndex = caret;
+        field.Focus();
     }
 
     private void OnSuggestionClicked(object sender, MouseButtonEventArgs e)
@@ -973,6 +1018,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnTitleEditorLostFocus(object sender, RoutedEventArgs e)
     {
+        _viewModel.CloseSuggestions(); // подсказка принадлежала этой правке
         if ((sender as FrameworkElement)?.DataContext is TaskCardViewModel card) card.CommitEdit();
     }
 

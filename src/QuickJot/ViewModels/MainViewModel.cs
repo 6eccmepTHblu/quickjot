@@ -230,6 +230,15 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool IsSuggesting => Suggestions.Count > 0;
 
+    /// <summary>Подсказку сейчас кормит правка заголовка карточки, а не поле ввода.</summary>
+    private bool _suggestInCard;
+
+    /// <summary>
+    /// Подсказка под полем ввода. Пока правят заголовок карточки, она принадлежит карточке:
+    /// два одинаковых списка на экране одновременно — это вопрос «какой из них мой».
+    /// </summary>
+    public bool IsSuggestingBelowInput => IsSuggesting && !_suggestInCard;
+
     /// <summary>Выбранная строка подсказки: по ней ходят ↑↓, её подставляет Tab.</summary>
     [ObservableProperty]
     private int _suggestionIndex;
@@ -238,8 +247,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// Пересчитать подсказку под каретку. Вызывается на каждое изменение поля ввода:
     /// решает, набирают ли сейчас тег, и что предложить.
     /// </summary>
-    public void UpdateSuggestions(string text, int caret)
+    public void UpdateSuggestions(string text, int caret, bool inCard = false)
     {
+        _suggestInCard = inCard;
         var typed = TagFormat.TypedTag(text, caret);
 
         Suggestions.Clear();
@@ -261,6 +271,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         SuggestionIndex = 0;
         OnPropertyChanged(nameof(IsSuggesting));
+        OnPropertyChanged(nameof(IsSuggestingBelowInput));
     }
 
     public void MoveSuggestion(int delta)
@@ -276,6 +287,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         Suggestions.Clear();
         OnPropertyChanged(nameof(IsSuggesting));
+        OnPropertyChanged(nameof(IsSuggestingBelowInput));
     }
 
     /// <summary>Подставить выбранный тег вместо набираемого. Возвращает новый текст и место каретки.</summary>

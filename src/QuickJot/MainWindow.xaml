@@ -240,6 +240,33 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
+        <!-- Строка подсказки тегов: сам тег и справа число задач либо «создать». -->
+        <DataTemplate x:Key="TagSuggestionTemplate">
+            <Grid MouseLeftButtonUp="OnSuggestionClicked" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13"
+                           Foreground="{DynamicResource TextBrush}" />
+                <TextBlock Grid.Column="1" Text="{Binding Hint}" FontSize="12"
+                           Foreground="{DynamicResource MutedBrush}" />
+            </Grid>
+        </DataTemplate>
+
+        <!-- Один вид подсказки на оба места, где пишут теги: поле ввода и правка заголовка. -->
+        <Style x:Key="SuggestionList" TargetType="ListBox">
+            <Setter Property="Background" Value="{DynamicResource NoteSurfaceBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="MaxHeight" Value="152" />
+            <Setter Property="Padding" Value="4" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource SubtaskRow}" />
+            <Setter Property="ItemTemplate" Value="{StaticResource TagSuggestionTemplate}" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        </Style>
+
         <!-- «Отменить» в тосте: текстовая ссылка, а не кнопка с рамкой. -->
         <Style x:Key="LinkButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
@@ -309,33 +336,11 @@
                     своей жизнью с фокусом и порядком отрисовки.
                 -->
                 <ListBox x:Name="TagSuggestions"
+                         Style="{StaticResource SuggestionList}"
+                         Margin="0,0,0,6"
                          ItemsSource="{Binding Suggestions}"
                          SelectedIndex="{Binding SuggestionIndex}"
-                         Visibility="{Binding IsSuggesting, Converter={StaticResource BoolToVisibility}}"
-                         Background="{DynamicResource NoteSurfaceBrush}"
-                         BorderThickness="0"
-                         Focusable="False"
-                         Margin="0,0,0,6"
-                         MaxHeight="152"
-                         Padding="4"
-                         HorizontalContentAlignment="Stretch"
-                         ItemContainerStyle="{StaticResource SubtaskRow}"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Grid MouseLeftButtonUp="OnSuggestionClicked" Background="Transparent">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13"
-                                           Foreground="{DynamicResource TextBrush}" />
-                                <TextBlock Grid.Column="1" Text="{Binding Hint}" FontSize="12"
-                                           Foreground="{DynamicResource MutedBrush}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                         Visibility="{Binding IsSuggestingBelowInput, Converter={StaticResource BoolToVisibility}}" />
             </StackPanel>
 
             <!-- Поле заметки: раскрывается по Tab, сворачивается только пустым — раздел 7. -->
@@ -490,18 +495,31 @@
                                                    VerticalAlignment="Center"
                                                    MaxHeight="{Binding DataContext.TitleMaxHeight, RelativeSource={RelativeSource AncestorType=Window}}" />
 
-                                        <!-- Правка на месте: Enter сохраняет, Esc откатывает — раздел 10. -->
-                                        <TextBox Grid.Column="1"
-                                                 x:Name="TitleEditor"
-                                                 Style="{StaticResource PlainTextBox}"
-                                                 Padding="0"
-                                                 FontSize="14"
-                                                 MaxLength="500"
-                                                 Visibility="Collapsed"
-                                                 VerticalAlignment="Center"
-                                                 IsVisibleChanged="OnTitleEditorVisibleChanged"
-                                                 LostKeyboardFocus="OnTitleEditorLostFocus"
-                                                 Text="{Binding EditTitle, UpdateSourceTrigger=PropertyChanged}" />
+                                        <!--
+                                            Правка на месте: Enter сохраняет, Esc откатывает — раздел 10.
+                                            Под полем — та же подсказка тегов, что под полем ввода: теги
+                                            дописывают и в уже живой задаче, и вспоминать их наизусть незачем.
+                                        -->
+                                        <StackPanel Grid.Column="1">
+                                            <TextBox x:Name="TitleEditor"
+                                                     Style="{StaticResource PlainTextBox}"
+                                                     Padding="0"
+                                                     FontSize="14"
+                                                     MaxLength="500"
+                                                     Visibility="Collapsed"
+                                                     VerticalAlignment="Center"
+                                                     IsVisibleChanged="OnTitleEditorVisibleChanged"
+                                                     LostKeyboardFocus="OnTitleEditorLostFocus"
+                                                     SelectionChanged="OnCardTitleSelectionChanged"
+                                                     Text="{Binding EditTitle, UpdateSourceTrigger=PropertyChanged}" />
+
+                                            <ListBox x:Name="CardTagSuggestions"
+                                                     Style="{StaticResource SuggestionList}"
+                                                     Margin="0,6,0,2"
+                                                     Visibility="Collapsed"
+                                                     ItemsSource="{Binding DataContext.Suggestions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                     SelectedIndex="{Binding DataContext.SuggestionIndex, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                        </StackPanel>
 
                                         <Button Grid.Column="2"
                                                 x:Name="FlagButton"
@@ -605,6 +623,15 @@
                                 <Setter TargetName="TitleText" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="TitleEditor" Property="Visibility" Value="Visible" />
                             </DataTrigger>
+
+                            <!-- Подсказка тегов принадлежит той карточке, которую сейчас правят. -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsEditing}" Value="True" />
+                                    <Condition Binding="{Binding DataContext.IsSuggesting, RelativeSource={RelativeSource AncestorType=Window}}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter TargetName="CardTagSuggestions" Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
 
                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                                 <Setter TargetName="Card" Property="Background" Value="{DynamicResource CardHoverBrush}" />
