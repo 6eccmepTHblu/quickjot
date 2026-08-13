@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:QuickJot"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         Title="QuickJot"
         Width="560"
         MinWidth="360"
@@ -25,6 +26,67 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!--
+            Слой состояния — раздел 15. Кисти из словаря ресурсов заморожены, и перекрасить их
+            анимацией нельзя: ColorAnimation по ним падает в рантайме. Поэтому фон не меняется,
+            а поверх базового лежит прозрачный слой и проявляется сам.
+
+            Состояние приходит через Tag: одна разметка обслуживает наведение, выделение,
+            подсветку новой задачи и корешок. Tag объявлен как object, поэтому значение условия
+            задаётся типизированным литералом — строка «True» с ним не сравнится.
+        -->
+        <Style x:Key="StateLayer" TargetType="Border">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Style.Triggers>
+                <!-- Анимации выключены — слой просто включается. -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Tag, RelativeSource={RelativeSource Self}}">
+                            <Condition.Value>
+                                <sys:Boolean>True</sys:Boolean>
+                            </Condition.Value>
+                        </Condition>
+                        <Condition Binding="{Binding DataContext.AnimationsOn, RelativeSource={RelativeSource AncestorType=Window}}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Opacity" Value="1" />
+                </MultiDataTrigger>
+
+                <!--
+                    Кросс-фейд. From намеренно не задан: анимация стартует с текущего значения,
+                    поэтому быстрый проход мышью по списку не мигает — слой подхватывается с
+                    полпути. Гаснет медленнее, чем зажигается: подсветка новой задачи так успевает
+                    «отпустить», а наведение не выглядит липким.
+                -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Tag, RelativeSource={RelativeSource Self}}">
+                            <Condition.Value>
+                                <sys:Boolean>True</sys:Boolean>
+                            </Condition.Value>
+                        </Condition>
+                        <Condition Binding="{Binding DataContext.AnimationsOn, RelativeSource={RelativeSource AncestorType=Window}}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <MultiDataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.12" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </MultiDataTrigger.EnterActions>
+                    <MultiDataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.2" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </MultiDataTrigger.ExitActions>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+
 
         <!--
             Поля без рамки: только каретка и placeholder (раздел 15). Стандартный шаблон Fluent
@@ -408,6 +470,25 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
+                                <!--
+                                    Слои состояния — раздел 15. Лежат под содержимым и поверх базового
+                                    фона карточки; порядок в разметке задаёт, что видно выше при
+                                    совпадении состояний. Фон самой карточки триггерами больше не
+                                    подменяется: смена кисти скачком — это то, ради чего слои и заведены.
+                                -->
+                                <Border Grid.ColumnSpan="2"
+                                        Style="{StaticResource StateLayer}"
+                                        Background="{DynamicResource CardHoverBrush}"
+                                        Tag="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                                <Border Grid.ColumnSpan="2"
+                                        Style="{StaticResource StateLayer}"
+                                        Background="{DynamicResource AccentSoftBrush}"
+                                        Tag="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                                <Border Grid.ColumnSpan="2"
+                                        Style="{StaticResource StateLayer}"
+                                        Background="{DynamicResource AccentHighlightBrush}"
+                                        Tag="{Binding IsNew}" />
+
                                 <!-- Полоска важности: видна постоянно у важных задач — раздел 8. -->
                                 <Rectangle Grid.Column="0"
                                            Width="3"
@@ -457,7 +538,13 @@
                                                 CornerRadius="1"
                                                 HorizontalAlignment="Left"
                                                 Margin="1,0,0,0"
-                                                Background="{DynamicResource SpineBrush}" />
+                                                Background="{DynamicResource SpineBrush}">
+                                            <!-- Подсветка отдельным слоем: кисть корешка тоже заморожена. -->
+                                            <Border Style="{StaticResource StateLayer}"
+                                                    CornerRadius="1"
+                                                    Background="{DynamicResource SpineHoverBrush}"
+                                                    Tag="{Binding IsMouseOver, ElementName=Spine}" />
+                                        </Border>
                                     </Border>
 
                                     <!-- Ярус 1: чекбокс, заголовок, важность -->
@@ -633,10 +720,6 @@
                                 <Setter TargetName="CardTagSuggestions" Property="Visibility" Value="Visible" />
                             </MultiDataTrigger>
 
-                            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource CardHoverBrush}" />
-                            </DataTrigger>
-
                             <!-- Развёрнутая: линия стоит ровно вдоль пунктов чеклиста, не задевая описание. -->
                             <DataTrigger Binding="{Binding IsExpanded}" Value="True">
                                 <Setter TargetName="Spine" Property="Grid.Row" Value="3" />
@@ -645,18 +728,12 @@
 
                             <!-- Корешок под курсором заметно светлеет: иначе непонятно, что по нему кликают. -->
                             <Trigger SourceName="Spine" Property="IsMouseOver" Value="True">
-                                <Setter TargetName="SpineLine" Property="Background" Value="{DynamicResource SpineHoverBrush}" />
                                 <Setter TargetName="SpineLine" Property="Width" Value="3" />
                             </Trigger>
 
-                            <!-- Выделение: заливка акцентом 12% плюс фокусное кольцо — раздел 15. -->
+                            <!-- Выделение: заливка акцентом лежит слоем, кольцу хватает подмены кисти. -->
                             <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
                                 <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AccentRingBrush}" />
-                            </DataTrigger>
-
-                            <DataTrigger Binding="{Binding IsNew}" Value="True">
-                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource AccentHighlightBrush}" />
                             </DataTrigger>
 
                             <!-- Вставка строки, 180 мс — раздел 15. Играет только у новой карточки:
@@ -708,7 +785,29 @@
                        Margin="12,10,12,14"
                        HorizontalAlignment="Center"
                        Foreground="{DynamicResource MutedBrush}"
-                       Visibility="{Binding IsListEmpty, Converter={StaticResource BoolToVisibility}}" />
+                       Visibility="{Binding IsListEmpty, Converter={StaticResource BoolToVisibility}}">
+                <!-- Только на появление: спрятать его Visibility успевает раньше любой анимации. -->
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsListEmpty}" Value="True" />
+                                    <Condition Binding="{Binding AnimationsOn}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <MultiDataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                             From="0" To="1" Duration="0:0:0.15" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </MultiDataTrigger.EnterActions>
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
 
             <!-- Блок «Выполнено сегодня» в конце списка, по умолчанию свёрнут — раздел 9. -->
             <StackPanel x:Name="CompletedBlock" Visibility="{Binding HasCompleted, Converter={StaticResource BoolToVisibility}}">
@@ -750,6 +849,37 @@
                     Background="{DynamicResource ToastBrush}"
                     BorderBrush="{DynamicResource CardBorderBrush}"
                     Visibility="{Binding HasToast, Converter={StaticResource BoolToVisibility}}">
+                <!-- Выезжает снизу, а не возникает: окно как раз растёт на его высоту. -->
+                <Border.RenderTransform>
+                    <TranslateTransform />
+                </Border.RenderTransform>
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding HasToast}" Value="True" />
+                                    <Condition Binding="{Binding AnimationsOn}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <MultiDataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                             From="0" To="1" Duration="0:0:0.12" />
+                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                             From="12" To="0" Duration="0:0:0.16">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </MultiDataTrigger.EnterActions>
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                     <TextBlock Text="{Binding Toast}"
                                FontSize="13"
@@ -768,7 +898,63 @@
     <Border Background="{DynamicResource ScrimBrush}"
             Padding="20"
             Visibility="{Binding IsHelpOpen, Converter={StaticResource BoolToVisibility}}">
-        <StackPanel VerticalAlignment="Center">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Style.Triggers>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsHelpOpen}" Value="True" />
+                            <Condition Binding="{Binding AnimationsOn}" Value="True" />
+                        </MultiDataTrigger.Conditions>
+                        <MultiDataTrigger.EnterActions>
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                     From="0" To="1" Duration="0:0:0.14" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </MultiDataTrigger.EnterActions>
+                    </MultiDataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+
+        <StackPanel VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+            <!-- Содержимое подрастает вслед за затемнением — то же движение, что у появления окна. -->
+            <StackPanel.RenderTransform>
+                <ScaleTransform />
+            </StackPanel.RenderTransform>
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsHelpOpen}" Value="True" />
+                                <Condition Binding="{Binding AnimationsOn}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <MultiDataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         From="0.98" To="1" Duration="0:0:0.14">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         From="0.98" To="1" Duration="0:0:0.14">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </MultiDataTrigger.EnterActions>
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
+
             <TextBlock Text="Горячие клавиши" FontSize="15" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" />
 
