@@ -141,6 +141,72 @@
             </Setter>
         </Style>
 
+        <!--
+            Раскрытие блока — раздел 15. Высоту к Auto анимировать нечем, поэтому сжимается
+            LayoutTransform, как у уходящих строк: сжаться должна именно разметка, иначе блок
+            освободит место рывком. Элементу нужен свой ScaleTransform прямо в разметке —
+            общий из стиля был бы заморожен, и анимация по нему упала бы.
+
+            Показывает сеттер, а не анимация: код сразу после раскрытия ставит каретку в поле,
+            а фокус в невидимый элемент не встаёт. Прячет наоборот анимация — иначе блок исчезал
+            бы, не успев схлопнуться. FillBehavior="Stop" возвращает значения базовым, поэтому
+            следующее раскрытие начинается с чистого листа.
+        -->
+        <Style x:Key="Reveal" TargetType="FrameworkElement">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}">
+                    <DataTrigger.Value>
+                        <sys:Boolean>True</sys:Boolean>
+                    </DataTrigger.Value>
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Tag, RelativeSource={RelativeSource Self}}">
+                            <Condition.Value>
+                                <sys:Boolean>True</sys:Boolean>
+                            </Condition.Value>
+                        </Condition>
+                        <Condition Binding="{Binding DataContext.AnimationsOn, RelativeSource={RelativeSource AncestorType=Window}}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <MultiDataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard FillBehavior="Stop">
+                                <DoubleAnimation Storyboard.TargetProperty="(FrameworkElement.LayoutTransform).(ScaleTransform.ScaleY)"
+                                                 From="0" To="1" Duration="0:0:0.16">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut" />
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 From="0" To="1" Duration="0:0:0.16" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </MultiDataTrigger.EnterActions>
+                    <MultiDataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard FillBehavior="Stop">
+                                <ObjectAnimationUsingKeyFrames Storyboard.TargetProperty="Visibility">
+                                    <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="{x:Static Visibility.Visible}" />
+                                    <DiscreteObjectKeyFrame KeyTime="0:0:0.16" Value="{x:Static Visibility.Collapsed}" />
+                                </ObjectAnimationUsingKeyFrames>
+                                <DoubleAnimation Storyboard.TargetProperty="(FrameworkElement.LayoutTransform).(ScaleTransform.ScaleY)"
+                                                 To="0" Duration="0:0:0.16">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseIn" />
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="0" Duration="0:0:0.12" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </MultiDataTrigger.ExitActions>
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Заметка: вложенная поверхность, а не светлая коробка поверх тёмного окна. -->
         <Style x:Key="NoteTextBox" TargetType="TextBox" BasedOn="{StaticResource PlainTextBox}">
             <Setter Property="Background" Value="{DynamicResource NoteSurfaceBrush}" />
@@ -464,16 +530,23 @@
                          Visibility="{Binding IsSuggestingBelowInput, Converter={StaticResource BoolToVisibility}}" />
             </StackPanel>
 
-            <!-- Поле заметки: раскрывается по Tab, сворачивается только пустым — раздел 7. -->
-            <TextBox x:Name="Note"
-                     Grid.Row="1"
-                     Style="{StaticResource NoteTextBox}"
-                     Margin="0,0,0,6"
-                     MinHeight="56"
-                     MaxHeight="160"
-                     LostKeyboardFocus="OnNoteLostFocus"
-                     Visibility="{Binding IsNoteOpen, Converter={StaticResource BoolToVisibility}}"
-                     Text="{Binding NoteDraft, UpdateSourceTrigger=PropertyChanged}" />
+            <!-- Поле заметки: раскрывается по Tab, сворачивается только пустым — раздел 7.
+                 Обёртка нужна под раскрытие: у самого поля уже есть свой стиль. -->
+            <Border x:Name="NoteArea"
+                    Grid.Row="1"
+                    Style="{StaticResource Reveal}"
+                    Tag="{Binding IsNoteOpen}">
+                <Border.LayoutTransform>
+                    <ScaleTransform />
+                </Border.LayoutTransform>
+                <TextBox x:Name="Note"
+                         Style="{StaticResource NoteTextBox}"
+                         Margin="0,0,0,6"
+                         MinHeight="56"
+                         MaxHeight="160"
+                         LostKeyboardFocus="OnNoteLostFocus"
+                         Text="{Binding NoteDraft, UpdateSourceTrigger=PropertyChanged}" />
+            </Border>
 
             <Border x:Name="Divider"
                     Grid.Row="2"
@@ -716,16 +789,21 @@
                                     </ItemsControl>
 
                                     <!-- Развёрнутая заметка. Пустая — это поле для её добавления. -->
-                                    <TextBox Grid.Row="2"
-                                             Grid.Column="1"
-                                             x:Name="NoteEditor"
-                                             Style="{StaticResource NoteTextBox}"
-                                             Margin="0,6,0,0"
-                                             MinHeight="44"
-                                             MaxHeight="140"
-                                             Visibility="{Binding ShowNote, Converter={StaticResource BoolToVisibility}}"
-                                             LostKeyboardFocus="OnCardNoteLostFocus"
-                                             Text="{Binding Notes, UpdateSourceTrigger=LostFocus}" />
+                                    <Border Grid.Row="2"
+                                            Grid.Column="1"
+                                            Style="{StaticResource Reveal}"
+                                            Tag="{Binding ShowNote}">
+                                        <Border.LayoutTransform>
+                                            <ScaleTransform />
+                                        </Border.LayoutTransform>
+                                        <TextBox x:Name="NoteEditor"
+                                                 Style="{StaticResource NoteTextBox}"
+                                                 Margin="0,6,0,0"
+                                                 MinHeight="44"
+                                                 MaxHeight="140"
+                                                 LostKeyboardFocus="OnCardNoteLostFocus"
+                                                 Text="{Binding Notes, UpdateSourceTrigger=LostFocus}" />
+                                    </Border>
 
                                     <!--
                                         Чеклист под заметкой — раздел 8. Заметка отвечает «про что задача»,
@@ -737,7 +815,11 @@
                                     <StackPanel Grid.Row="3"
                                                 Grid.Column="1"
                                                 Margin="0,6,0,0"
-                                                Visibility="{Binding ShowChecklist, Converter={StaticResource BoolToVisibility}}">
+                                                Style="{StaticResource Reveal}"
+                                                Tag="{Binding ShowChecklist}">
+                                        <StackPanel.LayoutTransform>
+                                            <ScaleTransform />
+                                        </StackPanel.LayoutTransform>
                                         <ListBox x:Name="SubtaskList"
                                                  ItemsSource="{Binding Subtasks}"
                                                  ItemTemplate="{StaticResource SubtaskTemplate}"
@@ -934,7 +1016,12 @@
                          Foreground="{DynamicResource TextBrush}"
                          HorizontalContentAlignment="Stretch"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         Visibility="{Binding IsCompletedExpanded, Converter={StaticResource BoolToVisibility}}" />
+                         Style="{StaticResource Reveal}"
+                         Tag="{Binding IsCompletedExpanded}">
+                    <ListBox.LayoutTransform>
+                        <ScaleTransform />
+                    </ListBox.LayoutTransform>
+                </ListBox>
             </StackPanel>
 
               </StackPanel>

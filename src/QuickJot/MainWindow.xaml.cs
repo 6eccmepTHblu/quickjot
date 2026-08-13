@@ -88,7 +88,7 @@ public partial class MainWindow : Window
         bool mirrored = _viewModel.IsMirrored;
 
         Grid.SetRow(InputArea, mirrored ? 4 : 0);
-        Grid.SetRow(Note, mirrored ? 3 : 1);
+        Grid.SetRow(NoteArea, mirrored ? 3 : 1);
         Grid.SetRow(Divider, 2);
         Grid.SetRow(Scroll, mirrored ? 1 : 3);
         Grid.SetRow(Toast, mirrored ? 0 : 4);
