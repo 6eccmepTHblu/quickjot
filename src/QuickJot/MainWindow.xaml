@@ -918,6 +918,36 @@
                             </DataTrigger>
 
                             <!--
+                                Перенос мышью: карточка гаснет, пока её тащат. FillBehavior="Stop"
+                                на возврате обязателен — выполненная задача приглушена сеттером,
+                                и анимация с HoldEnd навсегда перебила бы его непрозрачностью.
+                            -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsDragging}" Value="True" />
+                                    <Condition Binding="{Binding DataContext.AnimationsOn, RelativeSource={RelativeSource AncestorType=Window}}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <MultiDataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Card"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.5" Duration="0:0:0.12" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </MultiDataTrigger.EnterActions>
+                                <MultiDataTrigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard FillBehavior="Stop">
+                                            <DoubleAnimation Storyboard.TargetName="Card"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.16" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </MultiDataTrigger.ExitActions>
+                            </MultiDataTrigger>
+
+                            <!--
                                 Уход строки. Условия на AnimationsOn нет: признак ставится только
                                 тогда, когда анимации включены, иначе строку убирают сразу.
                                 Обратный ход нужен для Ctrl+Z: строку могут вернуть на полпути.

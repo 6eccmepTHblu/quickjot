@@ -893,6 +893,10 @@ public sealed partial class TaskCardViewModel : ObservableObject, ILeaving
     [ObservableProperty]
     private DropSide _dropIndicator;
 
+    /// <summary>Эту карточку сейчас тащат мышью — раздел 15.</summary>
+    [ObservableProperty]
+    private bool _isDragging;
+
     /// <summary>Правка заголовка на месте — раздел 10.</summary>
     [ObservableProperty]
     private bool _isEditing;

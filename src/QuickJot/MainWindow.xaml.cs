@@ -299,16 +299,12 @@ public partial class MainWindow : Window
             // Alt+↑↓ двигают карточку так, как её видит человек: при нижних углах список перевёрнут.
             case Key.Up when Alt && card is not null:
                 e.Handled = true;
-                if (_viewModel.IsMirrored) _viewModel.MoveDown(card);
-                else _viewModel.MoveUp(card);
-                FocusList(list.Items.IndexOf(card), list);
+                MoveCard(card, list, up: true);
                 break;
 
             case Key.Down when Alt && card is not null:
                 e.Handled = true;
-                if (_viewModel.IsMirrored) _viewModel.MoveUp(card);
-                else _viewModel.MoveDown(card);
-                FocusList(list.Items.IndexOf(card), list);
+                MoveCard(card, list, up: false);
                 break;
 
             // Уйти обратно в поле ввода: стрелкой в его сторону с ближней к нему строки.
@@ -822,7 +818,9 @@ public partial class MainWindow : Window
             if (node is ListBox { Name: "SubtaskList" }) return;
         }
 
-        Scroll.ScrollToVerticalOffset(Scroll.VerticalOffset - e.Delta);
+        if (_viewModel.AnimationsOn) SmoothScroll.By(Scroll, -e.Delta);
+        else Scroll.ScrollToVerticalOffset(Scroll.VerticalOffset - e.Delta);
+
         e.Handled = true;
     }
 
@@ -894,6 +892,68 @@ public partial class MainWindow : Window
         return null;
     }
 
+    // --- переезд карточки на новое место, раздел 15 ---
+
+    private static readonly Duration SlideDuration = new(TimeSpan.FromMilliseconds(180));
+
+    /// <summary>Alt+↑↓ — раздел 10. Карточки меняются местами переездом, а не подменой.</summary>
+    private void MoveCard(TaskCardViewModel card, ListBox list, bool up)
+    {
+        var tops = CardTops(list);
+
+        if (up == _viewModel.IsMirrored) _viewModel.MoveDown(card);
+        else _viewModel.MoveUp(card);
+
+        FocusList(list.Items.IndexOf(card), list);
+        SlideFrom(list, tops);
+    }
+
+    /// <summary>
+    /// Где строки стоят сейчас. Позиция берётся относительно самого списка, а не окна: внешняя
+    /// прокрутка может уехать вместе с перестановкой, и тогда «переехали» бы вообще все.
+    /// </summary>
+    private Dictionary<TaskCardViewModel, double> CardTops(ListBox list)
+    {
+        var tops = new Dictionary<TaskCardViewModel, double>();
+        if (!_viewModel.AnimationsOn) return tops;
+
+        foreach (var item in list.Items)
+        {
+            if (item is TaskCardViewModel card && list.ItemContainerGenerator.ContainerFromItem(item) is FrameworkElement row)
+            {
+                tops[card] = row.TranslatePoint(default, list).Y;
+            }
+        }
+
+        return tops;
+    }
+
+    /// <summary>
+    /// Перестановка меняет порядок мгновенно, поэтому переезд рисуется задним числом: строки
+    /// возвращаются сдвигом туда, где были, и этот сдвиг уводится в ноль. Двигается
+    /// RenderTransform — разметка уже в новом порядке, и трогать её больше нельзя.
+    /// </summary>
+    private void SlideFrom(ListBox list, Dictionary<TaskCardViewModel, double> tops)
+    {
+        if (tops.Count == 0) return;
+
+        list.UpdateLayout();
+
+        foreach (var (card, was) in tops)
+        {
+            if (list.ItemContainerGenerator.ContainerFromItem(card) is not FrameworkElement row) continue;
+            if (FindDescendant(row, "Card") is not Border { RenderTransform: TranslateTransform shift }) continue;
+
+            double moved = was - row.TranslatePoint(default, list).Y;
+            if (Math.Abs(moved) < 1) continue; // строка осталась на месте — ехать нечему
+
+            shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(moved, 0, SlideDuration)
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            });
+        }
+    }
+
     // --- перетаскивание порядка мышью, раздел 9 ---
 
     private Point _dragOrigin;
@@ -921,7 +981,12 @@ public partial class MainWindow : Window
         var dragged = _dragCandidate;
         _dragCandidate = null;
 
-        DragDrop.DoDragDrop(List, dragged, DragDropEffects.Move);
+        // Гасим карточку на время переноса: иначе непонятно, какую именно из них тащат.
+        // DoDragDrop не возвращает управление до конца перетаскивания, поэтому снимаем следом.
+        dragged.IsDragging = true;
+        try { DragDrop.DoDragDrop(List, dragged, DragDropEffects.Move); }
+        finally { dragged.IsDragging = false; }
+
         ClearDropIndicators();
     }
 
@@ -952,7 +1017,9 @@ public partial class MainWindow : Window
             ? List.Items.Count
             : List.Items.IndexOf(target) + (below ? 1 : 0);
 
+        var tops = CardTops(List);
         _viewModel.MoveTo(dragged, index);
+        SlideFrom(List, tops);
     }
 
     /// <summary>Карточка под точкой и половина, в которую попал курсор: выше или ниже её середины.</summary>
