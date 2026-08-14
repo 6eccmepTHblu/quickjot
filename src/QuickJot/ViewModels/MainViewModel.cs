@@ -70,6 +70,60 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isNoteOpen;
 
+    // --- черновик чеклиста, раздел 7 ---
+
+    /// <summary>
+    /// Чеклист будущей задачи. Разбивать задачу на пункты чаще всего хочется в тот же момент,
+    /// когда её придумал, а не после создания: иначе приходится создавать, искать в списке
+    /// и лезть внутрь карточки.
+    /// </summary>
+    public ObservableCollection<SubtaskViewModel> SubtaskDraft { get; } = [];
+
+    /// <summary>Строка «+ подзадача» под полем создания раскрыта — раздел 7.</summary>
+    [ObservableProperty]
+    private bool _isSubtaskDraftOpen;
+
+    public bool HasSubtaskDraft => SubtaskDraft.Count > 0;
+
+    public void AddDraftSubtask(string title)
+    {
+        var trimmed = title.Trim();
+        if (trimmed.Length == 0) return;
+
+        SubtaskDraft.Add(Attach(new SubtaskViewModel(new Subtask(false, trimmed)) { IsNew = true }));
+        OnPropertyChanged(nameof(HasSubtaskDraft));
+    }
+
+    private SubtaskViewModel Attach(SubtaskViewModel subtask)
+    {
+        subtask.DeleteRequested += RemoveDraftSubtask;
+        return subtask;
+    }
+
+    private void RemoveDraftSubtask(SubtaskViewModel subtask)
+    {
+        subtask.DeleteRequested -= RemoveDraftSubtask;
+
+        Leaving.Play(subtask, () =>
+        {
+            SubtaskDraft.Remove(subtask);
+            OnPropertyChanged(nameof(HasSubtaskDraft));
+        });
+    }
+
+    /// <summary>То, что уйдёт в новую задачу; оно же переживает закрытие окна.</summary>
+    private string? DraftSubtasksText =>
+        SubtaskFormat.Format(SubtaskDraft.Select(s => new Subtask(s.IsDone, s.Title)));
+
+    private void LoadDraftSubtasks(string? stored)
+    {
+        foreach (var old in SubtaskDraft) old.DeleteRequested -= RemoveDraftSubtask;
+        SubtaskDraft.Clear();
+
+        foreach (var parsed in SubtaskFormat.Parse(stored)) SubtaskDraft.Add(Attach(new SubtaskViewModel(parsed)));
+        OnPropertyChanged(nameof(HasSubtaskDraft));
+    }
+
     /// <summary>Шпаргалка по горячим клавишам, F1 — раздел 10.</summary>
     [ObservableProperty]
     private bool _isHelpOpen;
@@ -411,6 +465,9 @@ public sealed partial class MainViewModel : ObservableObject
         Draft = _settings?.Get(SettingKeys.DraftTitle) ?? "";
         NoteDraft = _settings?.Get(SettingKeys.DraftNote) ?? "";
         IsNoteOpen = NoteDraft.Length > 0;
+
+        LoadDraftSubtasks(_settings?.Get(SettingKeys.DraftSubtasks));
+        IsSubtaskDraftOpen = HasSubtaskDraft;
     }
 
     /// <summary>
@@ -421,6 +478,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         _settings?.Set(SettingKeys.DraftTitle, Draft);
         _settings?.Set(SettingKeys.DraftNote, NoteDraft);
+        _settings?.Set(SettingKeys.DraftSubtasks, DraftSubtasksText ?? "");
     }
 
     /// <summary>
@@ -546,13 +604,15 @@ public sealed partial class MainViewModel : ObservableObject
         if (title.Length == 0) return false;
 
         var notes = string.IsNullOrWhiteSpace(NoteDraft) ? null : NoteDraft.Trim();
-        var card = NewCard(_tasks.Create(title, notes, TagFormat.Format(tags)), isNew: true);
+        var card = NewCard(_tasks.Create(title, notes, TagFormat.Format(tags), DraftSubtasksText), isNew: true);
         Add(card, atTop: true); // новые в начало списка — раздел 9
         Record("Задача создана", () => RemoveCard(card), () => RestoreCard(card));
 
         Draft = "";
         NoteDraft = "";
         IsNoteOpen = false;
+        LoadDraftSubtasks(null);
+        IsSubtaskDraftOpen = false;
         Highlight(card);
 
         return true;

@@ -140,6 +140,7 @@ public partial class MainWindow : Window
         if (EditingCard is { } editing) HandleEditKeys(e, editing);
         else if (Input.IsKeyboardFocused) HandleTitleKeys(e);
         else if (Note.IsKeyboardFocused) HandleNoteKeys(e);
+        else if (DraftSubtaskInput.IsKeyboardFocused) HandleDraftSubtaskKeys(e);
         // Поля внутри карточки разбираются до списка: иначе пробел в тексте заметки
         // достался бы списку и выполнил задачу.
         else if (Keyboard.FocusedElement is TextBox { Name: "SubtaskInput" } adder) HandleSubtaskInputKeys(e, adder);
@@ -249,11 +250,82 @@ public partial class MainWindow : Window
                 Input.Focus();
                 break;
 
+            // Дальше по лестнице — чеклист будущей задачи, как и внутри карточки.
+            case Key.Tab:
+                e.Handled = true;
+                OpenSubtaskDraft();
+                break;
+
             case Key.Escape:
                 e.Handled = true;
                 ReturnToTitle();
                 break;
         }
+    }
+
+    /// <summary>
+    /// Строка «+ подзадача» под полем создания — раздел 7. Клавиши те же, что у такой же строки
+    /// внутри карточки: Enter добавляет и оставляет каретку здесь, Esc возвращает в заголовок.
+    /// </summary>
+    private void HandleDraftSubtaskKeys(KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Enter when Ctrl:
+                e.Handled = true;
+                AddDraftSubtask(); // набранное не теряется: сначала пункт, потом задача
+                if (_viewModel.Create()) Input.Focus();
+                break;
+
+            case Key.Enter:
+                e.Handled = true;
+                AddDraftSubtask();
+                break;
+
+            case Key.Tab when Shift:
+                e.Handled = true;
+                if (_viewModel.IsNoteOpen) Note.Focus();
+                else Input.Focus();
+                break;
+
+            case Key.Tab:
+            case Key.Escape:
+                e.Handled = true;
+                Input.Focus();
+                break;
+        }
+    }
+
+    /// <summary>Раскрыть чеклист будущей задачи и поставить каретку в строку добавления.</summary>
+    private void OpenSubtaskDraft()
+    {
+        _viewModel.IsSubtaskDraftOpen = true;
+
+        // Следующим проходом: строка могла стать видимой только что и ещё не в дереве.
+        Dispatcher.BeginInvoke(() => DraftSubtaskInput.Focus(), DispatcherPriority.Input);
+    }
+
+    private void AddDraftSubtask()
+    {
+        _viewModel.AddDraftSubtask(DraftSubtaskInput.Text);
+        DraftSubtaskInput.Clear();
+    }
+
+    /// <summary>Ушли из строки: набранное становится пунктом, пустой чеклист закрывается.</summary>
+    private void OnDraftSubtaskInputLostFocus(object sender, RoutedEventArgs e)
+    {
+        AddDraftSubtask();
+        if (!_viewModel.HasSubtaskDraft) _viewModel.IsSubtaskDraftOpen = false;
+    }
+
+    /// <summary>Вставка списка: каждая строка становится отдельным пунктом — как и в карточке.</summary>
+    private void OnDraftSubtaskPasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (PastedLines(e) is not { } lines) return;
+
+        e.CancelCommand();
+        foreach (var line in lines) _viewModel.AddDraftSubtask(line);
+        DraftSubtaskInput.Clear();
     }
 
     /// <summary>Работает и для активного списка, и для блока «Выполнено сегодня» — раздел 9.</summary>
@@ -326,6 +398,13 @@ public partial class MainWindow : Window
             case Key.Tab when !Shift && card is not null:
                 e.Handled = true;
                 FocusCardNote(card);
+                break;
+
+            // `→` идёт вглубь ступенями: сначала разворот карточки, потом чеклист. Одной ступени
+            // не хватало — до подзадач с клавиатуры можно было добраться только Tab через заметку.
+            case Key.Right when card is not null && card.IsExpanded:
+                e.Handled = true;
+                FocusSubtaskInput(card);
                 break;
 
             case Key.Right when card is not null:
@@ -678,22 +757,32 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Вставка списка: каждая строка становится отдельным пунктом.</summary>
-    private void OnSubtaskPasting(object sender, DataObjectPastingEventArgs e)
+    /// <summary>
+    /// Непустые строки вставляемого текста, обрезанные по пределу пункта. Меньше двух строк —
+    /// null: это обычная вставка в поле, перехватывать её незачем.
+    /// </summary>
+    private static List<string>? PastedLines(DataObjectPastingEventArgs e)
     {
-        if (sender is not TextBox { DataContext: TaskCardViewModel card } input) return;
-        if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText)) return;
-        if (e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string pasted) return;
+        if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText)) return null;
+        if (e.SourceDataObject.GetData(DataFormats.UnicodeText) is not string pasted) return null;
 
         var lines = pasted.Split('\n')
             .Select(line => line.Trim())
             .Where(line => line.Length > 0)
+            .Select(line => line.Length > 500 ? line[..500] : line)
             .ToList();
 
-        if (lines.Count < 2) return; // одна строка — обычная вставка в поле
+        return lines.Count < 2 ? null : lines;
+    }
+
+    /// <summary>Вставка списка: каждая строка становится отдельным пунктом.</summary>
+    private void OnSubtaskPasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: TaskCardViewModel card } input) return;
+        if (PastedLines(e) is not { } lines) return;
 
         e.CancelCommand();
-        foreach (var line in lines) card.AddSubtask(line.Length > 500 ? line[..500] : line);
+        foreach (var line in lines) card.AddSubtask(line);
         input.Clear();
     }
 

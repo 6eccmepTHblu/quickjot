@@ -40,6 +40,7 @@ internal static class Program
         Run("теги: создание, правка, фильтр, удаление", Tags);
         Run("чеклист: правка, порядок, отмена, фильтр", Checklist);
         Run("уход строки: отмена на полпути", LeavingRows);
+        Run("чеклист набирается до создания задачи", SubtaskDraft);
 
         Console.WriteLine(_failures == 0 ? "\nвсе проверки прошли" : $"\nпровалено: {_failures}");
         return _failures == 0 ? 0 : 1;
@@ -733,6 +734,39 @@ internal static class Program
     /// <summary>
     /// Чеклист целиком: добавление, выполнение, порядок, запись в базу, отмена и поиск по пунктам.
     /// </summary>
+    /// <summary>
+    /// Чеклист набирают там же, где заголовок, — раздел 7. Пункты должны пережить закрытие окна
+    /// вместе с черновиком и уехать в задачу одним куском при создании.
+    /// </summary>
+    private static void SubtaskDraft(TaskRepository repo, SettingsStore settings)
+    {
+        var vm = new MainViewModel(repo, settings);
+        vm.Draft = "большая задача";
+        vm.AddDraftSubtask("первый пункт");
+        vm.AddDraftSubtask("  второй пункт  ");
+        vm.AddDraftSubtask("   "); // пустое не пункт
+        Check(vm.SubtaskDraft.Count == 2 && vm.HasSubtaskDraft, "черновик чеклиста набрался не так");
+
+        vm.SaveDraft();
+        var reopened = new MainViewModel(repo, settings);
+        reopened.Load();
+        Check(reopened.SubtaskDraft.Count == 2, "черновик чеклиста не пережил закрытие окна");
+        Check(reopened.IsSubtaskDraftOpen, "восстановленный черновик остался свёрнутым");
+
+        Check(reopened.Create(), "задача не создалась");
+        var card = reopened.Tasks[0];
+        Check(card.Subtasks.Select(s => s.Title).SequenceEqual(["первый пункт", "второй пункт"]),
+            "пункты не уехали в созданную задачу");
+        Check(repo.Find(card.Id)!.Subtasks == "[ ] первый пункт\n[ ] второй пункт",
+            "чеклист не записался в базу при создании");
+        Check(!reopened.HasSubtaskDraft && !reopened.IsSubtaskDraftOpen, "черновик не очистился после создания");
+
+        // Пункт из черновика удаляется так же, как в карточке.
+        reopened.AddDraftSubtask("лишний");
+        reopened.SubtaskDraft[0].DeleteCommand.Execute(null);
+        Check(!reopened.HasSubtaskDraft, "пункт черновика не удалился");
+    }
+
     /// <summary>
     /// Уход строки — раздел 15. Пока строка схлопывается, она ещё в списке: Ctrl+Z на полпути
     /// обязан вернуть ту же строку, а не вставить её вторым экземпляром.

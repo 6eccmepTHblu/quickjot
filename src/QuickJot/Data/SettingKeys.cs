@@ -21,6 +21,7 @@ public static class SettingKeys
 
     public const string DraftTitle = "draft.title";
     public const string DraftNote = "draft.note";
+    public const string DraftSubtasks = "draft.subtasks";
 
     public const string AutostartEnabled = "autostart.enabled";
     public const string AutostartAdmin = "autostart.admin";

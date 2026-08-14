@@ -49,7 +49,7 @@ public sealed class TaskRepository(SqliteConnection db)
         $"SELECT {Columns} FROM tasks WHERE id = @id", new { id });
 
     /// <summary>Новая задача встаёт в начало списка — раздел 9.</summary>
-    public TaskItem Create(string title, string? notes = null, string? tags = null)
+    public TaskItem Create(string title, string? notes = null, string? tags = null, string? subtasks = null)
     {
         var now = DateTime.UtcNow;
         var first = db.ExecuteScalar<double?>(
@@ -61,15 +61,16 @@ public sealed class TaskRepository(SqliteConnection db)
             Title = title,
             Notes = notes,
             Tags = tags,
+            Subtasks = subtasks,
             SortOrder = (first ?? 0) - Step,
             CreatedAt = now,
             UpdatedAt = now,
         };
 
         db.Execute("""
-            INSERT INTO tasks (id, title, notes, tags, is_flagged, is_expanded, sort_order, created_at, updated_at)
-            VALUES (@Id, @Title, @Notes, @Tags, @IsFlagged, @IsExpanded, @SortOrder, @Now, @Now)
-            """, new { item.Id, item.Title, item.Notes, item.Tags, item.IsFlagged, item.IsExpanded, item.SortOrder, Now = Db.Iso(now) });
+            INSERT INTO tasks (id, title, notes, tags, subtasks, is_flagged, is_expanded, sort_order, created_at, updated_at)
+            VALUES (@Id, @Title, @Notes, @Tags, @Subtasks, @IsFlagged, @IsExpanded, @SortOrder, @Now, @Now)
+            """, new { item.Id, item.Title, item.Notes, item.Tags, item.Subtasks, item.IsFlagged, item.IsExpanded, item.SortOrder, Now = Db.Iso(now) });
 
         return item;
     }
