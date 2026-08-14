@@ -208,6 +208,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Уход строк играется из карточек, а настройки знает только список. Без запущенного
         // приложения таймеру некому тикать, поэтому в проверках строка уходит сразу.
         Leaving.Animated = AnimationsOn && Application.Current is not null;
+        Appearance.Animated = AnimationsOn;
         Theme = _settings?.Get(SettingKeys.Theme) ?? "system";
     }
 

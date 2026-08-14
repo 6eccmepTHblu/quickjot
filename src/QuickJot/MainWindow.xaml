@@ -630,7 +630,8 @@
                                         Background="{DynamicResource AccentHighlightBrush}"
                                         Tag="{Binding IsNew}" />
 
-                                <!-- Полоска важности: видна постоянно у важных задач — раздел 8. -->
+                                <!-- Полоска важности: видна постоянно у важных задач — раздел 8.
+                                     Растёт сверху вниз тем же стилем, что и раскрывающиеся блоки. -->
                                 <Rectangle Grid.Column="0"
                                            Width="3"
                                            RadiusX="1.5"
@@ -638,7 +639,12 @@
                                            Margin="0,8"
                                            HorizontalAlignment="Left"
                                            Fill="{DynamicResource AccentBrush}"
-                                           Visibility="{Binding IsFlagged, Converter={StaticResource BoolToVisibility}}" />
+                                           Style="{StaticResource Reveal}"
+                                           Tag="{Binding IsFlagged}">
+                                    <Rectangle.LayoutTransform>
+                                        <ScaleTransform />
+                                    </Rectangle.LayoutTransform>
+                                </Rectangle>
 
                                 <Grid Grid.Column="1" Margin="5,8,8,8">
                                     <!-- Заголовок, теги, заметка, чеклист. Яруса с иконками у карточки нет:
@@ -765,7 +771,11 @@
                                                   Grid.Column="1"
                                                   ItemsSource="{Binding Tags}"
                                                   Margin="0,5,0,1"
-                                                  Visibility="{Binding HasTags, Converter={StaticResource BoolToVisibility}}">
+                                                  Style="{StaticResource Reveal}"
+                                                  Tag="{Binding HasTags}">
+                                        <ItemsControl.LayoutTransform>
+                                            <ScaleTransform />
+                                        </ItemsControl.LayoutTransform>
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
                                                 <WrapPanel />
@@ -855,6 +865,33 @@
                                 <Setter TargetName="Card" Property="Opacity" Value="0.45" />
                                 <Setter TargetName="TitleText" Property="TextDecorations" Value="Strikethrough" />
                             </DataTrigger>
+
+                            <!-- Гаснет плавно: зачёркивание анимировать нечем, а приглушение можно.
+                                 Возврат снимается FillBehavior, чтобы сеттер выше снова работал. -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsCompleted}" Value="True" />
+                                    <Condition Binding="{Binding DataContext.AnimationsOn, RelativeSource={RelativeSource AncestorType=Window}}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <MultiDataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Card"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.45" Duration="0:0:0.2" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </MultiDataTrigger.EnterActions>
+                                <MultiDataTrigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard FillBehavior="Stop">
+                                            <DoubleAnimation Storyboard.TargetName="Card"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.2" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </MultiDataTrigger.ExitActions>
+                            </MultiDataTrigger>
 
                             <DataTrigger Binding="{Binding IsEditing}" Value="True">
                                 <Setter TargetName="TitleText" Property="Visibility" Value="Collapsed" />
@@ -1069,13 +1106,18 @@
                     BorderThickness="1"
                     Background="{DynamicResource ToastBrush}"
                     BorderBrush="{DynamicResource CardBorderBrush}"
-                    Visibility="{Binding HasToast, Converter={StaticResource BoolToVisibility}}">
-                <!-- Выезжает снизу, а не возникает: окно как раз растёт на его высоту. -->
+                    Tag="{Binding HasToast}">
+                <!-- Выезжает снизу, а не возникает: окно как раз растёт на его высоту.
+                     Сдвиг идёт по RenderTransform, потому что LayoutTransform занят раскрытием. -->
+                <Border.LayoutTransform>
+                    <ScaleTransform />
+                </Border.LayoutTransform>
                 <Border.RenderTransform>
                     <TranslateTransform />
                 </Border.RenderTransform>
                 <Border.Style>
-                    <Style TargetType="Border">
+                    <!-- Проявление и уход берутся у Reveal, здесь остаётся только выезд. -->
+                    <Style TargetType="Border" BasedOn="{StaticResource Reveal}">
                         <Style.Triggers>
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
@@ -1084,9 +1126,7 @@
                                 </MultiDataTrigger.Conditions>
                                 <MultiDataTrigger.EnterActions>
                                     <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                             From="0" To="1" Duration="0:0:0.12" />
+                                        <Storyboard FillBehavior="Stop">
                                             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
                                                              From="12" To="0" Duration="0:0:0.16">
                                                 <DoubleAnimation.EasingFunction>

@@ -10,6 +10,9 @@ public partial class TagsWindow : Window
         InitializeComponent();
         DataContext = viewModel;
 
+        // Появление — как у главного окна, только расти неоткуда, кроме как из центра.
+        Loaded += (_, _) => Appearance.Play(Root, Appearance.FromCenter);
+
         Theme.Apply(this, theme);
         ThemeMode = theme switch
         {

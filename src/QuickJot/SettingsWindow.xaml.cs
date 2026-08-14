@@ -16,6 +16,9 @@ public partial class SettingsWindow : Window
 
         ApplyTheme(viewModel.Theme);
 
+        // Появление — как у главного окна, только расти неоткуда, кроме как из центра.
+        Loaded += (_, _) => Appearance.Play(Root, Appearance.FromCenter);
+
         // Тему меняют прямо здесь — окно обязано перекраситься сразу, иначе выбор не виден.
         viewModel.PropertyChanged += (_, args) =>
         {

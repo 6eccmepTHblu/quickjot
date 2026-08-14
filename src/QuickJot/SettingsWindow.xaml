@@ -131,7 +131,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Padding="16,10,16,16">
+    <Border x:Name="Root" Padding="16,10,16,16">
         <StackPanel>
 
             <!-- Заголовок окна: за него же окно и таскается (CaptionHeight выше). -->

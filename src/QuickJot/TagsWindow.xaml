@@ -67,7 +67,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Padding="16,12,16,16">
+    <Border x:Name="Root" Padding="16,12,16,16">
         <StackPanel>
             <Grid Margin="0,0,0,14">
                 <TextBlock Text="Теги" FontSize="18" FontWeight="SemiBold"

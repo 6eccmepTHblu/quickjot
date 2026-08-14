@@ -41,33 +41,13 @@ public partial class MainWindow : Window
     /// Анимируется содержимое, а не само окно: прозрачность окна требует AllowsTransparency,
     /// который ломает Mica (раздел 5).
     /// </summary>
-    public void PlayAppearance()
+    public void PlayAppearance() => Appearance.Play(Root, _viewModel.Corner switch
     {
-        if (!_viewModel.AnimationsOn)
-        {
-            Root.Opacity = 1;
-            Root.RenderTransform = Transform.Identity;
-            return;
-        }
-
-        Root.RenderTransformOrigin = _viewModel.Corner switch
-        {
-            AnchorCorner.TopLeft => new Point(0, 0),
-            AnchorCorner.TopRight => new Point(1, 0),
-            AnchorCorner.BottomLeft => new Point(0, 1),
-            _ => new Point(1, 1),
-        };
-
-        var scale = new ScaleTransform(0.98, 0.98);
-        Root.RenderTransform = scale;
-
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var grow = new DoubleAnimation(0.98, 1, TimeSpan.FromMilliseconds(120)) { EasingFunction = ease };
-
-        Root.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)));
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
-    }
+        AnchorCorner.TopLeft => new Point(0, 0),
+        AnchorCorner.TopRight => new Point(1, 0),
+        AnchorCorner.BottomLeft => new Point(0, 1),
+        _ => new Point(1, 1),
+    });
 
     /// <summary>Применить всё, что изменилось в окне настроек — раздел 13.</summary>
     public void ApplySettings()
