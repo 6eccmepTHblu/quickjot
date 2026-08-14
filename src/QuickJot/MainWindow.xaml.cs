@@ -400,18 +400,14 @@ public partial class MainWindow : Window
                 FocusCardNote(card);
                 break;
 
-            // `→` идёт вглубь ступенями: сначала разворот карточки, потом чеклист. Одной ступени
-            // не хватало — до подзадач с клавиатуры можно было добраться только Tab через заметку.
-            case Key.Right when card is not null && card.IsExpanded:
-                e.Handled = true;
-                FocusSubtaskInput(card);
-                break;
-
+            // `→` идёт вглубь по ступеням «карточка → описание → подзадачи», `←` тем же путём
+            // обратно. С карточки первая ступень — описание; его пропускают, только когда
+            // описания нет, а чеклист есть: открывать пустое поле, чтобы тут же уйти, незачем.
             case Key.Right when card is not null:
                 e.Handled = true;
                 card.IsExpanded = true;
-                // Разворачивать нечего — значит, просят место под заметку.
-                if (!card.HasNotes && !card.HasSubtasks) card.IsNoteRequested = true;
+                if (card.HasNotes || !card.HasSubtasks) FocusCardNote(card);
+                else FocusSubtaskInput(card);
                 break;
 
             case Key.Left when card is not null:
@@ -650,6 +646,13 @@ public partial class MainWindow : Window
                 FocusCardNote(card);
                 break;
 
+            // `←` с пункта — на ступень выше: к описанию, а если его нет — на саму карточку.
+            case Key.Left:
+                e.Handled = true;
+                if (card.ShowNote) FocusCardNote(card);
+                else FocusCard(card);
+                break;
+
             case Key.Escape:
                 e.Handled = true;
                 FocusCard(card);
@@ -682,6 +685,13 @@ public partial class MainWindow : Window
                 FocusCardNote(card);
                 break;
 
+            // `←` с начала строки — обратно к описанию: та же лестница, что и у `→`.
+            case Key.Left when AtStart(input):
+                e.Handled = true;
+                if (card.ShowNote) FocusCardNote(card);
+                else FocusCard(card);
+                break;
+
             case Key.Tab:
             case Key.Escape:
                 e.Handled = true;
@@ -705,12 +715,28 @@ public partial class MainWindow : Window
                 FocusSubtaskInput(card);
                 break;
 
+            // Стрелки продолжают ту же лестницу, но только с края текста: внутри строки они
+            // двигают каретку, и отнимать их у текстового поля нельзя.
+            case Key.Right when AtEnd(note):
+                e.Handled = true;
+                FocusSubtaskInput(card);
+                break;
+
+            case Key.Left when AtStart(note):
+                e.Handled = true;
+                FocusCard(card);
+                break;
+
             case Key.Escape:
                 e.Handled = true;
                 FocusCard(card);
                 break;
         }
     }
+
+    private static bool AtEnd(TextBox field) => field.SelectionLength == 0 && field.CaretIndex >= field.Text.Length;
+
+    private static bool AtStart(TextBox field) => field.SelectionLength == 0 && field.CaretIndex == 0;
 
     private static void AddSubtask(TextBox input, TaskCardViewModel card)
     {

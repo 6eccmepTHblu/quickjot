@@ -1257,11 +1257,11 @@
             <TextBlock Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"
                        Text="↑↓ — навигация · Alt+↑↓ — переставить · Esc — назад в поле" />
             <TextBlock Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap" Margin="0,0,0,10"
-                       Text="Space — выполнить · Enter — правка · Delete — удалить · → — раскрыть и вглубь · ← — свернуть · Ctrl+I — важность" />
+                       Text="Space — выполнить · Enter — правка · Delete — удалить · → и ← — вглубь карточки и обратно · Ctrl+I — важность" />
 
             <TextBlock Text="Чеклист внутри задачи" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,2" />
             <TextBlock Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"
-                       Text="Tab — вглубь карточки: заметка, затем пункты · Shift+Tab — обратно" />
+                       Text="Tab — вглубь карточки: заметка, затем пункты · Shift+Tab — обратно · то же стрелками → и ←" />
             <TextBlock Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap" Margin="0,0,0,10"
                        Text="Клавиши те же, что в списке: Space — выполнить · Enter — правка · Delete — удалить · Alt+↑↓ — переставить" />
 
