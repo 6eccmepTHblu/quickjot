@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -185,12 +185,12 @@ public partial class MainWindow : Window
             {
                 case Key.Up:
                     e.Handled = true;
-                    _viewModel.MoveSuggestion(-1);
+                    MoveSuggestion(-1);
                     return;
 
                 case Key.Down:
                     e.Handled = true;
-                    _viewModel.MoveSuggestion(1);
+                    MoveSuggestion(1);
                     return;
 
                 case Key.Tab:
@@ -433,12 +433,12 @@ public partial class MainWindow : Window
             {
                 case Key.Up:
                     e.Handled = true;
-                    _viewModel.MoveSuggestion(-1);
+                    MoveSuggestion(-1);
                     return;
 
                 case Key.Down:
                     e.Handled = true;
-                    _viewModel.MoveSuggestion(1);
+                    MoveSuggestion(1);
                     return;
 
                 case Key.Tab:
@@ -494,6 +494,22 @@ public partial class MainWindow : Window
         {
             _viewModel.UpdateSuggestions(editor.Text, editor.CaretIndex, inCard: true);
         }
+    }
+
+    /// <summary>
+    /// Перевести выбор в подсказке и подтянуть строку в видимую часть. Список тегов длиннее
+    /// своего потолка, и без прокрутки выбор уходил за край: видно, что что-то выбрано, а что
+    /// именно — нет.
+    /// </summary>
+    private void MoveSuggestion(int delta)
+    {
+        _viewModel.MoveSuggestion(delta);
+
+        var list = _viewModel.IsSuggestingBelowInput
+            ? TagSuggestions
+            : EditingCard is { } card ? CardElement(card, "CardTagSuggestions") as ListBox : null;
+
+        if (list?.SelectedItem is { } chosen) list.ScrollIntoView(chosen);
     }
 
     /// <summary>Поле, которое сейчас кормит подсказку: правка карточки, иначе поле ввода.</summary>
